@@ -183,4 +183,4 @@ ShowNotification(title, message) {
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Reload Script", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => ExitApp())
-TraySetToolTip "Solscan Hotkey Active (XButton1)"
+TraySetToolTip("Solscan Hotkey Active (XButton1)")
