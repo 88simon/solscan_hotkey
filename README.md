@@ -4,9 +4,9 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 
 ## Features
 
-- **XButton2** (Forward button): Open any Solana address in Solscan with customized filters
-- **XButton1** (Back button): Add exclusion filters to the current Solscan page
-- **Ctrl+XButton2**: Register addresses for Telegram monitoring (requires monitor service)
+- **F14/XButton2** (Forward button): Open any Solana address in Solscan with customized filters
+- **F13/XButton1** (Back button): Add exclusion filters to the current Solscan page
+- **Ctrl+F14/Ctrl+XButton2**: Register addresses for Telegram monitoring (requires monitor service)
 - Smart text detection with multiple fallback strategies
 - Validates Solana base58 addresses (32-44 characters)
 - Safe clipboard handling - restores your clipboard after use
@@ -18,7 +18,7 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 ### Core Requirements
 - **Windows** (10 or later)
 - **AutoHotkey v2.0+** - [Download here](https://www.autohotkey.com/)
-- A mouse with side buttons (XButton1/XButton2)
+- A mouse with side buttons (or configurable gaming mouse like Logitech G502)
 
 ### Optional (for Telegram Monitoring)
 - **Python 3.8+** - [Download here](https://www.python.org/downloads/)
@@ -33,7 +33,22 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 3. Choose "Install" (default options are fine)
 4. **Important**: Make sure you install v2.0+, not v1.1
 
-### Step 2: Run the Script
+### Step 2: Configure Your Mouse (Logitech G HUB Users)
+
+If you have a Logitech gaming mouse (G502, G Pro, etc.) with G HUB software:
+
+1. Open Logitech G HUB
+2. Select your mouse profile
+3. Assign your side buttons:
+   - **One side button** → Keystroke: `F14` (for opening addresses)
+   - **Another side button** → Keystroke: `F13` (for exclusions)
+4. Save the profile
+
+**Why F13/F14?** G HUB can block native XButton signals. F13/F14 are unused extended function keys that work reliably with AutoHotkey.
+
+**If you don't have G HUB or gaming mouse software:** The script works directly with XButton1/XButton2. Skip this step.
+
+### Step 3: Run the Script
 
 **Option A: Manual Start**
 1. Double-click `solscan_hotkey.ahk`
@@ -55,7 +70,7 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 ### Basic Solscan Lookup
 
 1. Hover your mouse over any Solana address (in browser, Discord, code editor, etc.)
-2. **Single-click XButton2** (Forward button)
+2. **Single-click your F14-mapped button** (or XButton2 if not using G HUB)
 3. The address will be captured and validated
 4. If valid, Solscan opens automatically with custom filters:
    - SOL transfers only
@@ -66,15 +81,43 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 
 ### Exclusion Filters (Advanced)
 
-When viewing a Solscan page, you can filter out specific addresses:
+Filter out specific addresses from a wallet's transaction list to focus on interesting counterparties.
 
-1. While viewing an address on Solscan, hover over an address you want to exclude
-2. **Click XButton1** (Back button)
-3. The current page will reload with that address added to the exclusion filter
-4. Repeat to add multiple exclusions
-5. The exclusion list resets when you open a new address (XButton2)
+**How it works:**
 
-**Example use case:** Filtering out known exchange wallets or your own addresses to focus on new counterparties.
+1. **First, open a wallet with F14** (or XButton2)
+   - Example: Open whale wallet `ABC123...`
+   - This becomes your "main address" being analyzed
+   - The exclusion list starts empty
+
+2. **While viewing that wallet on Solscan, hover over addresses you want to exclude**
+   - Example: You see `Raydium DEX` appears in many transactions
+   - Hover over the Raydium address
+   - **Click your F13-mapped button** (or XButton1 if not using G HUB)
+   - The page reloads with that address filtered out
+
+3. **Add multiple exclusions**
+   - Repeat step 2 for other addresses (exchanges, known wallets, etc.)
+   - Each exclusion is added to the URL parameter: `&to_address=!Addr1,!Addr2,!Addr3`
+   - The transaction list updates to hide those addresses
+
+4. **The exclusion list resets** when you open a new main address with F14
+   - Exclusions are specific to analyzing one wallet at a time
+   - Opening a different wallet clears the previous exclusion list
+
+**Example workflow:**
+
+You're investigating whale `7xKXt...` and want to exclude:
+- `Jupiter` (aggregator)
+- `Pump.fun` (token launcher)
+- Your own wallet
+
+Just hover over each and press F13 three times. The transaction list now shows only novel counterparties.
+
+**Use cases:**
+- Filter out known DEXs and focus on direct wallet-to-wallet transfers
+- Exclude your own addresses when analyzing trading patterns
+- Remove exchange deposits/withdrawals to see OTC activity
 
 ### Telegram Monitoring (Phase 1 MVP)
 
@@ -131,9 +174,9 @@ An address is considered valid if:
 ## Controls
 
 ### Mouse Hotkeys
-- **XButton2** (Forward button) - Open Solana address in Solscan
-- **XButton1** (Back button) - Add exclusion filter to current Solscan page
-- **Ctrl + XButton2** - Register address for Telegram monitoring
+- **F14** (or XButton2 if not using G HUB) - Open Solana address in Solscan
+- **F13** (or XButton1 if not using G HUB) - Add exclusion filter to current Solscan page
+- **Ctrl + F14** (or Ctrl+XButton2) - Register address for Telegram monitoring
 
 ### Keyboard Shortcuts
 - **Ctrl+Alt+Q** - Exit the script (with confirmation)
@@ -143,13 +186,29 @@ An address is considered valid if:
 
 ### "Nothing happens when I click the side button"
 
+**For Logitech G HUB users:**
+1. Verify G HUB button mapping:
+   - Open G HUB and check your side buttons are mapped to F13/F14
+   - Ensure the profile is active (not set to "Default")
+2. Reload the AutoHotkey script: Right-click green "H" tray icon → Reload Script
+3. Test the F13/F14 keys directly by pressing them on your keyboard - you should see a tooltip
+
+**For non-G HUB users:**
 1. Verify AutoHotkey is installed: Check for green "H" in system tray
 2. Test your mouse button:
    - Open Notepad
    - Run `solscan_hotkey.ahk`
    - Click side button - you should see a tooltip
 3. Check if your mouse software is intercepting the button
-4. Run `test_mouse_buttons.ahk` to identify which button is which
+4. Run `test_buttons.ahk` to identify which button is which
+
+### "G HUB button not working even after mapping to F13/F14"
+
+1. Check G HUB profile is active (shown in the app)
+2. Some G HUB versions require "Persistent Profile" to be enabled
+3. Try closing and reopening G HUB
+4. Restart your computer after changing G HUB settings
+5. Test the key directly: Open Notepad, press your mapped button, you should see the F13/F14 key press
 
 ### "Monitor service offline" when using Ctrl+XButton2
 
