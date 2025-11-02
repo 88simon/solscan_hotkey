@@ -69,9 +69,11 @@ ExecuteSingleClick() {
 ; ============================================================================
 
 HandleSolscanLookup() {
+    ; Clear any pending clipboard operations
+    A_Clipboard := ""
+
     ; Save original clipboard
     ClipSaved := ClipboardAll()
-    A_Clipboard := ""
 
     ; Try to capture text under cursor
     capturedText := CaptureTextUnderCursor()
