@@ -110,8 +110,8 @@ HandleSolscanLookupWithExclude() {
     ClipSaved := ClipboardAll()
     A_Clipboard := ""
 
-    ; Try to capture text WITHOUT clicking (to avoid navigation)
-    capturedText := CaptureTextWithoutClicking()
+    ; Try to capture text under cursor (same as F14)
+    capturedText := CaptureTextUnderCursor()
 
     ; Restore clipboard immediately
     A_Clipboard := ClipSaved
@@ -149,7 +149,7 @@ HandleSolscanLookupWithExclude() {
             ShowNotification("Not a valid Solana address", capturedText)
         }
     } else {
-        ShowNotification("No text selected", "Highlight the address first.")
+        ShowNotification("No text captured", "Hover over an address and try again")
     }
 }
 
