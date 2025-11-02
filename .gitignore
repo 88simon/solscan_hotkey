@@ -1,0 +1,39 @@
+# ============================================================================
+# Solscan Hotkey - Git Ignore File
+# ============================================================================
+# This file tells Git which files to never commit to GitHub
+# ============================================================================
+
+# Private data - monitored addresses
+monitored_addresses.json
+
+# Python cache and temp files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments (if you create one later)
+venv/
+env/
+ENV/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Future sensitive config files (will remind you when needed)
+# config.json
+# .env
+# telegram_config.ini
+# api_keys.json

@@ -10,7 +10,7 @@ Version: 1.0 (Phase 1 - MVP)
 ============================================================================
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from datetime import datetime
 import json
 import os
@@ -106,13 +106,16 @@ def register_address():
                 "registered_at": monitored_addresses[address]['registered_at']
             }), 200
 
-        # Add new address
+        # Add new address with optional note
+        note = data.get('note', '').strip() if data.get('note') else None
+
         monitored_addresses[address] = {
             "address": address,
             "registered_at": datetime.now().isoformat(),
             "threshold": DEFAULT_THRESHOLD,
             "total_notifications": 0,
-            "last_notification": None
+            "last_notification": None,
+            "note": note
         }
 
         # Save to file
@@ -177,6 +180,78 @@ def health_check():
     }), 200
 
 
+@app.route('/address/<address>/note', methods=['PUT'])
+def update_note(address):
+    """Update note/tag for an address"""
+    if address not in monitored_addresses:
+        return jsonify({"error": "Address not found"}), 404
+
+    try:
+        data = request.get_json()
+        note = data.get('note', '').strip() if data.get('note') else None
+
+        monitored_addresses[address]['note'] = note
+        save_addresses()
+        print(f"✓ Updated note for address: {address}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Note updated successfully",
+            "address": address,
+            "note": note
+        }), 200
+
+    except Exception as e:
+        print(f"⚠ Error updating note: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/import', methods=['POST'])
+def import_addresses():
+    """Import addresses from backup file"""
+    try:
+        data = request.get_json()
+        imported = data.get('addresses', [])
+
+        if not isinstance(imported, list):
+            return jsonify({"error": "Invalid import format"}), 400
+
+        added = 0
+        skipped = 0
+
+        for addr_data in imported:
+            if isinstance(addr_data, dict):
+                address = addr_data.get('address')
+                if address and is_valid_solana_address(address):
+                    if address not in monitored_addresses:
+                        monitored_addresses[address] = {
+                            "address": address,
+                            "registered_at": addr_data.get('registered_at', datetime.now().isoformat()),
+                            "threshold": addr_data.get('threshold', DEFAULT_THRESHOLD),
+                            "total_notifications": addr_data.get('total_notifications', 0),
+                            "last_notification": addr_data.get('last_notification'),
+                            "note": addr_data.get('note')
+                        }
+                        added += 1
+                    else:
+                        skipped += 1
+
+        save_addresses()
+        print(f"✓ Imported {added} addresses ({skipped} skipped as duplicates)")
+
+        return jsonify({
+            "status": "success",
+            "message": f"Imported {added} addresses ({skipped} duplicates skipped)",
+            "added": added,
+            "skipped": skipped,
+            "total": len(monitored_addresses)
+        }), 200
+
+    except Exception as e:
+        print(f"⚠ Error importing addresses: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/clear', methods=['POST'])
 def clear_all():
     """Clear all monitored addresses (use with caution!)"""
@@ -190,6 +265,12 @@ def clear_all():
         "message": f"Cleared {count} addresses",
         "total_monitored": 0
     }), 200
+
+
+@app.route('/')
+def dashboard():
+    """Serve web dashboard"""
+    return render_template('dashboard.html')
 
 
 if __name__ == '__main__':
@@ -206,14 +287,18 @@ if __name__ == '__main__':
 
     print("-" * 70)
     print("Available endpoints:")
-    print("  POST   /register          - Register new address")
-    print("  GET    /addresses         - List all addresses")
-    print("  GET    /address/<addr>    - Get address details")
-    print("  DELETE /address/<addr>    - Remove address")
-    print("  GET    /health            - Health check")
-    print("  POST   /clear             - Clear all addresses")
+    print("  GET    /                      - Web Dashboard")
+    print("  POST   /register              - Register new address")
+    print("  GET    /addresses             - List all addresses")
+    print("  GET    /address/<addr>        - Get address details")
+    print("  DELETE /address/<addr>        - Remove address")
+    print("  PUT    /address/<addr>/note   - Update address note")
+    print("  POST   /import                - Import addresses from backup")
+    print("  GET    /health                - Health check")
+    print("  POST   /clear                 - Clear all addresses")
     print("-" * 70)
-    print("\nPress Ctrl+C to stop the server")
+    print("\n📊 Open http://localhost:5001 in your browser to access the dashboard")
+    print("Press Ctrl+C to stop the server")
     print("=" * 70)
     print()
 

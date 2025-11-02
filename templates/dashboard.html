@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Address Monitor Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            color: #718096;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            color: #2d3748;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f7fafc;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            color: #4a5568;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .address-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #e6fffa;
+            color: #234e52;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .timestamp {
+            color: #718096;
+            font-size: 12px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #48bb78;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #f56565;
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Solana Address Monitor</h1>
+            <p>Manage and track your monitored Solana addresses</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Addresses</h3>
+                <div class="value" id="total-count">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Default Threshold</h3>
+                <div class="value">100 SOL</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>➕ Add New Address</h2>
+            <div id="add-message" class="message"></div>
+            <form id="add-form">
+                <div class="form-group">
+                    <label for="address">Solana Address *</label>
+                    <input type="text" id="address" name="address" placeholder="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" required>
+                </div>
+                <div class="form-group">
+                    <label for="note">Note / Tag (optional)</label>
+                    <input type="text" id="note" name="note" placeholder="e.g., whale wallet, exchange, friend">
+                </div>
+                <button type="submit" class="btn btn-primary">Add Address</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>📋 Monitored Addresses</h2>
+
+            <div class="search-box">
+                <input type="text" id="search" placeholder="🔍 Search addresses or notes...">
+            </div>
+
+            <div class="btn-group" style="margin-bottom: 20px;">
+                <button class="btn btn-secondary" onclick="exportData()">📥 Export Backup</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">📤 Import Backup</button>
+                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importData(event)">
+                <button class="btn btn-danger" onclick="clearAll()" style="margin-left: auto;">🗑️ Clear All</button>
+            </div>
+
+            <div id="list-message" class="message"></div>
+
+            <div id="addresses-table"></div>
+        </div>
+    </div>
+
+    <script>
+        let addresses = [];
+
+        // Load addresses on page load
+        async function loadAddresses() {
+            try {
+                const response = await fetch('/addresses');
+                const data = await response.json();
+                addresses = data.addresses || [];
+                document.getElementById('total-count').textContent = data.total;
+                renderTable();
+            } catch (error) {
+                showMessage('list-message', 'Error loading addresses: ' + error.message, 'error');
+            }
+        }
+
+        // Render table
+        function renderTable(filter = '') {
+            const container = document.getElementById('addresses-table');
+
+            let filtered = addresses;
+            if (filter) {
+                filter = filter.toLowerCase();
+                filtered = addresses.filter(addr =>
+                    addr.address.toLowerCase().includes(filter) ||
+                    (addr.note && addr.note.toLowerCase().includes(filter))
+                );
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state"><h3>No addresses found</h3><p>Add your first address using the form above</p></div>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Address</th><th>Note</th><th>Registered</th><th>Actions</th></tr></thead><tbody>';
+
+            filtered.forEach(addr => {
+                const note = addr.note || '-';
+                const date = new Date(addr.registered_at).toLocaleString();
+                html += `
+                    <tr>
+                        <td class="address-cell">
+                            <a href="https://solscan.io/account/${addr.address}" target="_blank" style="color: #667eea; text-decoration: none;">
+                                ${addr.address}
+                            </a>
+                        </td>
+                        <td>${note ? '<span class="tag">' + note + '</span>' : '-'}</td>
+                        <td class="timestamp">${date}</td>
+                        <td>
+                            <button class="btn btn-primary action-btn" onclick="editNote('${addr.address}')">✏️ Edit</button>
+                            <button class="btn btn-danger action-btn" onclick="deleteAddress('${addr.address}')">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Add address
+        document.getElementById('add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const address = document.getElementById('address').value.trim();
+            const note = document.getElementById('note').value.trim();
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({address, note})
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('add-message', data.message || 'Address added successfully!', 'success');
+                    document.getElementById('add-form').reset();
+                    loadAddresses();
+                } else {
+                    showMessage('add-message', data.error || 'Failed to add address', 'error');
+                }
+            } catch (error) {
+                showMessage('add-message', 'Error: ' + error.message, 'error');
+            }
+        });
+
+        // Delete address
+        async function deleteAddress(address) {
+            if (!confirm(`Are you sure you want to remove ${address}?`)) return;
+
+            try {
+                const response = await fetch(`/address/${address}`, {method: 'DELETE'});
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('list-message', data.message, 'success');
+                    loadAddresses();
+                } else {
+                    showMessage('list-message', data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('list-message', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // Edit note
+        async function editNote(address) {
+            const currentAddr = addresses.find(a => a.address === address);
+            const newNote = prompt('Enter note/tag for this address:', currentAddr.note || '');
+
+            if (newNote === null) return; // Cancelled
+
+            try {
+                const response = await fetch(`/address/${address}/note`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({note: newNote})
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('list-message', 'Note updated successfully!', 'success');
+                    loadAddresses();
+                } else {
+                    showMessage('list-message', data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('list-message', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // Clear all
+        async function clearAll() {
+            if (!confirm('Are you sure you want to delete ALL monitored addresses? This cannot be undone!')) return;
+
+            try {
+                const response = await fetch('/clear', {method: 'POST'});
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('list-message', data.message, 'success');
+                    loadAddresses();
+                } else {
+                    showMessage('list-message', data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('list-message', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // Export data
+        function exportData() {
+            const dataStr = JSON.stringify(addresses, null, 2);
+            const blob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `monitored_addresses_backup_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showMessage('list-message', 'Backup exported successfully!', 'success');
+        }
+
+        // Import data
+        async function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+
+                    const response = await fetch('/import', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({addresses: importedData})
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showMessage('list-message', data.message, 'success');
+                        loadAddresses();
+                    } else {
+                        showMessage('list-message', data.error, 'error');
+                    }
+                } catch (error) {
+                    showMessage('list-message', 'Invalid backup file: ' + error.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset file input
+        }
+
+        // Search
+        document.getElementById('search').addEventListener('input', (e) => {
+            renderTable(e.target.value);
+        });
+
+        // Show message
+        function showMessage(elementId, text, type) {
+            const el = document.getElementById(elementId);
+            el.textContent = text;
+            el.className = `message ${type}`;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
+        }
+
+        // Initialize
+        loadAddresses();
+        setInterval(loadAddresses, 10000); // Refresh every 10 seconds
+    </script>
+</body>
+</html>
