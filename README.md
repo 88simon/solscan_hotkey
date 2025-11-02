@@ -85,12 +85,11 @@ Filter out specific addresses from a wallet's transaction list to focus on inter
 
 **How it works:**
 
-1. **First, open a wallet with F14** (or XButton2)
+1. **Open a wallet on Solscan** (using F14 or by navigating manually)
    - Example: Open whale wallet `ABC123...`
-   - This becomes your "main address" being analyzed
-   - The exclusion list starts empty
+   - Any Solscan page works - even if you opened it manually
 
-2. **While viewing that wallet on Solscan, hover over addresses you want to exclude**
+2. **While viewing that wallet, hover over addresses you want to exclude**
    - Example: You see `Raydium DEX` appears in many transactions
    - Hover over the Raydium address
    - **Click your F13-mapped button** (or XButton1 if not using G HUB)
@@ -101,9 +100,12 @@ Filter out specific addresses from a wallet's transaction list to focus on inter
    - Each exclusion is added to the URL parameter: `&to_address=!Addr1,!Addr2,!Addr3`
    - The transaction list updates to hide those addresses
 
-4. **The exclusion list resets** when you open a new main address with F14
-   - Exclusions are specific to analyzing one wallet at a time
-   - Opening a different wallet clears the previous exclusion list
+4. **NEW: Per-tab exclusion persistence**
+   - Exclusions are stored in the browser URL, not in the script
+   - Each browser tab maintains its own exclusion list independently
+   - Switch between tabs freely - exclusions persist per tab
+   - Reload a tab manually - exclusions remain (they're in the URL)
+   - F13 reads existing exclusions from the URL and appends new ones
 
 **Example workflow:**
 
@@ -114,10 +116,17 @@ You're investigating whale `7xKXt...` and want to exclude:
 
 Just hover over each and press F13 three times. The transaction list now shows only novel counterparties.
 
+**Multi-tab workflow:**
+- Tab 1: Analyze whale A with exclusions for DEXs
+- Tab 2: Analyze whale B with exclusions for exchanges
+- Switch between tabs freely - each maintains its own filters
+- F13 always works on the currently viewed tab
+
 **Use cases:**
 - Filter out known DEXs and focus on direct wallet-to-wallet transfers
 - Exclude your own addresses when analyzing trading patterns
 - Remove exchange deposits/withdrawals to see OTC activity
+- Analyze multiple wallets simultaneously with different exclusion sets
 
 ### Telegram Monitoring (Phase 1 MVP)
 
