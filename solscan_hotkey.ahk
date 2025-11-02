@@ -135,8 +135,8 @@ HandleSolscanLookupWithExclude() {
     ClipSaved := ClipboardAll()
     A_Clipboard := ""
 
-    ; Try to capture text under cursor
-    capturedText := CaptureTextUnderCursor()
+    ; Try to capture text WITHOUT clicking (to avoid navigation)
+    capturedText := CaptureTextWithoutClicking()
 
     ; Restore clipboard immediately
     A_Clipboard := ClipSaved
@@ -214,6 +214,72 @@ CaptureTextUnderCursor() {
     if ClipWait(0.3) {
         if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
             return A_Clipboard
+        }
+    }
+
+    return ""
+}
+
+; ============================================================================
+; Text Capture WITHOUT Navigation (for exclusion feature)
+; ============================================================================
+; This function captures text under mouse cursor without triggering link clicks
+; by temporarily moving the mouse away during the double-click operation
+
+CaptureTextWithoutClicking() {
+    ; Strategy 1: Check if text is already selected
+    A_Clipboard := ""
+    Send "^c"
+    if ClipWait(0.2) {
+        if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
+            return Trim(A_Clipboard)
+        }
+    }
+
+    ; Strategy 2: Double-click to select, but prevent link navigation
+    ; Save current mouse position
+    MouseGetPos &originalX, &originalY
+
+    ; Move mouse slightly away to a safe neutral position (offset by 50 pixels)
+    ; This prevents the click from triggering on the hyperlink
+    MouseMove originalX + 50, originalY + 50, 0
+    Sleep 30
+
+    ; Move back to original position
+    MouseMove originalX, originalY, 0
+    Sleep 30
+
+    ; Now double-click to select the word
+    ; Use SendEvent for more reliable clicking
+    SendEvent "{Click}"
+    Sleep 50
+    SendEvent "{Click}"
+    Sleep SELECTION_DELAY
+
+    ; Copy selected text
+    A_Clipboard := ""
+    Send "^c"
+    if ClipWait(0.3) {
+        if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
+            captured := Trim(A_Clipboard)
+            return captured
+        }
+    }
+
+    ; Strategy 3: Try keyboard selection as fallback
+    ; Use keyboard to select word under cursor
+    Send "^{Left}"
+    Sleep 50
+    Send "^+{Right}"
+    Sleep SELECTION_DELAY
+
+    A_Clipboard := ""
+    Send "^c"
+    if ClipWait(0.3) {
+        if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
+            captured := Trim(A_Clipboard)
+            Send "{Right}"
+            return captured
         }
     }
 
