@@ -100,12 +100,7 @@ HandleSolscanLookupWithExclude() {
     global currentMainAddress
     global excludedAddressesList
 
-    ; Check if we have a main address to work with
-    if (currentMainAddress == "") {
-        ShowNotification("No main address set", "Use F14 (main button) first to open an address")
-        return
-    }
-
+    ; IMPORTANT: Capture text FIRST before doing any navigation
     ; Save original clipboard
     ClipSaved := ClipboardAll()
     A_Clipboard := ""
@@ -116,6 +111,24 @@ HandleSolscanLookupWithExclude() {
     ; Restore clipboard immediately
     A_Clipboard := ClipSaved
     ClipSaved := ""
+
+    ; NOW detect the address from current browser URL (after capturing text)
+    detectedAddress := GetAddressFromBrowserURL()
+
+    ; If we detected an address from the URL, update the current main address
+    if (detectedAddress != "") {
+        ; If this is a different address than before, reset exclusions
+        if (currentMainAddress != detectedAddress) {
+            currentMainAddress := detectedAddress
+            excludedAddressesList := []
+        }
+    } else {
+        ; Fallback: Check if we have a previously set main address
+        if (currentMainAddress == "") {
+            ShowNotification("No Solscan page detected", "Open a Solscan address page first")
+            return
+        }
+    }
 
     ; Process captured text
     if (capturedText != "") {
@@ -259,6 +272,43 @@ ExtractAddressFromText(text) {
     if RegExMatch(text, "[1-9A-HJ-NP-Za-km-z]{32,44}", &match) {
         return match[0]
     }
+    return ""
+}
+
+; ============================================================================
+; Helper: Get address from current browser URL
+; ============================================================================
+
+GetAddressFromBrowserURL() {
+    ; Get the current browser URL by copying it from the address bar
+    ; Save clipboard
+    ClipSaved := ClipboardAll()
+    A_Clipboard := ""
+
+    ; Select address bar (Ctrl+L works in most browsers)
+    Send "^l"
+    Sleep 100
+
+    ; Copy URL
+    Send "^c"
+    Sleep 100
+
+    ; Get URL from clipboard
+    currentURL := A_Clipboard
+
+    ; Restore clipboard
+    A_Clipboard := ClipSaved
+    ClipSaved := ""
+
+    ; Press Escape to deselect address bar
+    Send "{Escape}"
+
+    ; Extract address from Solscan URL
+    ; Format: https://solscan.io/account/ADDRESS...
+    if RegExMatch(currentURL, "solscan\.io/account/([1-9A-HJ-NP-Za-km-z]{32,44})", &match) {
+        return match[1]
+    }
+
     return ""
 }
 
