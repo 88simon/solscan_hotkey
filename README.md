@@ -4,8 +4,8 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 
 ## Features
 
-- **Single-click XButton2**: Open any Solana address in Solscan with customized filters
-- **Double-click XButton2**: Add exclusion filters to the current Solscan page
+- **XButton2** (Forward button): Open any Solana address in Solscan with customized filters
+- **XButton1** (Back button): Add exclusion filters to the current Solscan page
 - **Ctrl+XButton2**: Register addresses for Telegram monitoring (requires monitor service)
 - Smart text detection with multiple fallback strategies
 - Validates Solana base58 addresses (32-44 characters)
@@ -69,10 +69,10 @@ Instantly open Solscan for any Solana address by hovering and clicking your side
 When viewing a Solscan page, you can filter out specific addresses:
 
 1. While viewing an address on Solscan, hover over an address you want to exclude
-2. **Double-click XButton2**
+2. **Click XButton1** (Back button)
 3. The current page will reload with that address added to the exclusion filter
 4. Repeat to add multiple exclusions
-5. The exclusion list resets when you open a new address (single-click)
+5. The exclusion list resets when you open a new address (XButton2)
 
 **Example use case:** Filtering out known exchange wallets or your own addresses to focus on new counterparties.
 
@@ -131,8 +131,8 @@ An address is considered valid if:
 ## Controls
 
 ### Mouse Hotkeys
-- **Single-click XButton2** - Open Solana address in Solscan
-- **Double-click XButton2** - Add exclusion filter to current Solscan page
+- **XButton2** (Forward button) - Open Solana address in Solscan
+- **XButton1** (Back button) - Add exclusion filter to current Solscan page
 - **Ctrl + XButton2** - Register address for Telegram monitoring
 
 ### Keyboard Shortcuts

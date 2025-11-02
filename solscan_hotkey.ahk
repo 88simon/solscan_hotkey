@@ -22,56 +22,31 @@ global currentMainAddress := ""
 global excludedAddressesList := []
 
 ; ============================================================================
-; MAIN HOTKEY: XButton2 (Side Mouse Button - typically "Forward" button)
+; MAIN HOTKEY: F14 (mapped from your mouse button in G HUB)
 ; ============================================================================
-; Single click: Open new address
-; Double click: Add exclusion filter to current page
+; Opens Solana address in Solscan with filters
+; Hover over address + click the button you mapped to F14
 ; ============================================================================
 
-; Global variables for double-click detection
-global lastClickTime := 0
-global doubleClickThreshold := 300  ; milliseconds
-global pendingTimer := ""
+F14::HandleSolscanLookup()
 
 ; ============================================================================
-; TELEGRAM MONITOR HOTKEY: Ctrl+XButton2
+; EXCLUSION HOTKEY: F13 (mapped from your mouse button in G HUB)
+; ============================================================================
+; Add exclusion filter to current Solscan page
+; Hover over address + click the button you mapped to F13
+; ============================================================================
+
+F13::HandleSolscanLookupWithExclude()
+
+; ============================================================================
+; TELEGRAM MONITOR HOTKEY: Ctrl+F14
 ; ============================================================================
 ; Register address for Telegram monitoring of large transfers
+; Hold Ctrl + click the button you mapped to F14
 ; ============================================================================
 
-^XButton2::HandleTelegramRegister()
-
-XButton2::
-{
-    global lastClickTime
-    global doubleClickThreshold
-    global pendingTimer
-
-    currentTime := A_TickCount
-    timeSinceLastClick := currentTime - lastClickTime
-
-    if (timeSinceLastClick < doubleClickThreshold && timeSinceLastClick > 0) {
-        ; This is a double-click - add exclusion
-        ; Cancel the pending single-click timer
-        if (pendingTimer != "") {
-            SetTimer(pendingTimer, 0)
-            pendingTimer := ""
-        }
-        HandleSolscanLookupWithExclude()
-        lastClickTime := 0  ; Reset to prevent triple-click from triggering
-    } else {
-        ; This is a single click - wait to see if double-click follows
-        lastClickTime := currentTime
-        pendingTimer := () => ExecuteSingleClick()
-        SetTimer(pendingTimer, -doubleClickThreshold)
-    }
-}
-
-ExecuteSingleClick() {
-    global pendingTimer
-    pendingTimer := ""
-    HandleSolscanLookup()
-}
+^F14::HandleTelegramRegister()
 
 ; ============================================================================
 ; Core Function: Capture text and open Solscan
@@ -127,7 +102,7 @@ HandleSolscanLookupWithExclude() {
 
     ; Check if we have a main address to work with
     if (currentMainAddress == "") {
-        ShowNotification("No main address set", "Use XButton2 first to open an address")
+        ShowNotification("No main address set", "Use F14 (main button) first to open an address")
         return
     }
 
@@ -174,7 +149,7 @@ HandleSolscanLookupWithExclude() {
             ShowNotification("Not a valid Solana address", capturedText)
         }
     } else {
-        ShowNotification("No text captured", "Hover over an address and try again")
+        ShowNotification("No text selected", "Highlight the address first.")
     }
 }
 
@@ -221,68 +196,25 @@ CaptureTextUnderCursor() {
 }
 
 ; ============================================================================
-; Text Capture WITHOUT Navigation (for exclusion feature)
+; Text Capture for Exclusion (Selection-Based Only)
 ; ============================================================================
-; This function captures text under mouse cursor without triggering link clicks
-; by temporarily moving the mouse away during the double-click operation
+; This function ONLY captures pre-selected text to avoid any mouse clicks
+; User must manually select/highlight the address before pressing XButton1
 
 CaptureTextWithoutClicking() {
-    ; Strategy 1: Check if text is already selected
+    ; Only try to copy already-selected text
+    ; No mouse clicking or automatic selection
     A_Clipboard := ""
     Send "^c"
-    if ClipWait(0.2) {
+
+    if ClipWait(0.3) {
         if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
             return Trim(A_Clipboard)
         }
     }
 
-    ; Strategy 2: Double-click to select, but prevent link navigation
-    ; Save current mouse position
-    MouseGetPos &originalX, &originalY
-
-    ; Move mouse slightly away to a safe neutral position (offset by 50 pixels)
-    ; This prevents the click from triggering on the hyperlink
-    MouseMove originalX + 50, originalY + 50, 0
-    Sleep 30
-
-    ; Move back to original position
-    MouseMove originalX, originalY, 0
-    Sleep 30
-
-    ; Now double-click to select the word
-    ; Use SendEvent for more reliable clicking
-    SendEvent "{Click}"
-    Sleep 50
-    SendEvent "{Click}"
-    Sleep SELECTION_DELAY
-
-    ; Copy selected text
-    A_Clipboard := ""
-    Send "^c"
-    if ClipWait(0.3) {
-        if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
-            captured := Trim(A_Clipboard)
-            return captured
-        }
-    }
-
-    ; Strategy 3: Try keyboard selection as fallback
-    ; Use keyboard to select word under cursor
-    Send "^{Left}"
-    Sleep 50
-    Send "^+{Right}"
-    Sleep SELECTION_DELAY
-
-    A_Clipboard := ""
-    Send "^c"
-    if ClipWait(0.3) {
-        if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
-            captured := Trim(A_Clipboard)
-            Send "{Right}"
-            return captured
-        }
-    }
-
+    ; If nothing was selected, return empty
+    ; User needs to manually select the address first
     return ""
 }
 
@@ -484,4 +416,4 @@ ShowNotification(title, message) {
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Reload Script", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => ExitApp())
-A_IconTip := "Solscan Hotkey Active`nXButton2 single: Open address`nXButton2 double: Add exclusion`nCtrl+XButton2: Monitor address"
+A_IconTip := "Solscan Hotkey Active`nF14: Open address`nF13: Add exclusion`nCtrl+F14: Monitor address"
