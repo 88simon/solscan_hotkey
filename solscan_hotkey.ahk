@@ -54,6 +54,16 @@ F13::HandleSolscanLookupWithExclude()
 ^F14::HandleTelegramRegister()
 
 ; ============================================================================
+; DEFINED.FI LOOKUP HOTKEY: F15
+; ============================================================================
+; Open Solana token on defined.fi with automatic search
+; Hover over token address + press F15
+; Requires Tampermonkey UserScript for reliable search automation
+; ============================================================================
+
+F15::HandleDefinedFiLookup()
+
+; ============================================================================
 ; Core Function: Capture text and open Solscan
 ; ============================================================================
 
@@ -504,6 +514,46 @@ RegisterAddressWithMonitor(address) {
 }
 
 ; ============================================================================
+; Defined.fi Lookup: Open Token on defined.fi with Auto-Search
+; ============================================================================
+
+HandleDefinedFiLookup() {
+    ; Save original clipboard
+    ClipSaved := ClipboardAll()
+    A_Clipboard := ""
+
+    ; Try to capture text under cursor
+    capturedText := CaptureTextUnderCursor()
+
+    ; Restore clipboard immediately
+    A_Clipboard := ClipSaved
+    ClipSaved := ""
+
+    ; Process captured text
+    if (capturedText != "") {
+        ; Extract address from text
+        address := ExtractAddressFromText(capturedText)
+
+        ; If extraction found nothing, check if the whole text is a valid address
+        if (address == "" && IsValidSolanaAddress(capturedText)) {
+            address := capturedText
+        }
+
+        ; Validate and open defined.fi
+        if (address != "" && IsValidSolanaAddress(address)) {
+            ; Open defined.fi with hash parameter for UserScript to handle
+            url := "https://defined.fi/#autosearch=" . address
+            Run url
+            ShowNotification("Opening defined.fi", address)
+        } else {
+            ShowNotification("Invalid token address", "Must be 32-44 character Solana address")
+        }
+    } else {
+        ShowNotification("No text captured", "Hover over a token address and try again")
+    }
+}
+
+; ============================================================================
 ; UI Feedback: Toast Notification
 ; ============================================================================
 
@@ -530,4 +580,4 @@ ShowNotification(title, message) {
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Reload Script", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => ExitApp())
-A_IconTip := "Solscan Hotkey Active`nF14: Open address`nF13: Add exclusion`nCtrl+F14: Monitor address"
+A_IconTip := "Solscan Hotkey Active`nF14: Open address`nF13: Add exclusion`nCtrl+F14: Monitor address`nF15: Defined.fi lookup"

@@ -15,6 +15,7 @@ See [monitor/README.md](monitor/README.md) for monitoring service documentation.
 
 - **F14/XButton2**: Open any Solana address in Solscan with custom filters
 - **F13/XButton1**: Add exclusion filters to current Solscan page (per-tab persistence)
+- **F15**: Open Solana token on defined.fi with automatic search (requires Tampermonkey)
 - **Ctrl+F14**: Register addresses for Telegram monitoring (requires monitor service)
 - Smart text detection with multiple fallback strategies
 - Safe clipboard handling - restores your clipboard after use
@@ -82,6 +83,24 @@ Filter out specific addresses to focus on interesting counterparties.
 **Example:**
 Analyzing whale wallet? Exclude Jupiter, Raydium, Pump.fun to see only novel counterparties.
 
+### Defined.fi Token Lookup (F15)
+
+Research Solana tokens instantly on defined.fi.
+
+**Setup (one-time):**
+1. Install Tampermonkey browser extension ([Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) | [Firefox](https://addons.mozilla.org/firefox/addon/tampermonkey/) | [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd))
+2. Open `userscripts/defined-fi-autosearch.user.js` in a text editor
+3. Copy the entire contents
+4. Click Tampermonkey icon → Dashboard → "+" (Create new script)
+5. Paste the script and save (Ctrl+S)
+
+**Usage:**
+1. Hover over any Solana token address
+2. Press F15 on your keyboard
+3. Defined.fi opens and automatically searches for the token
+
+**How it works:** The AutoHotkey script opens defined.fi with a special URL parameter. The Tampermonkey UserScript detects this parameter, triggers the site's search (Ctrl+K), fills in the address, and submits it automatically.
+
 ### Telegram Monitoring (Beta)
 
 **Start service:**
@@ -101,6 +120,7 @@ See [monitor/README.md](monitor/README.md) for full monitoring documentation.
 
 - **F14** (or XButton2) - Open address in Solscan
 - **F13** (or XButton1) - Add exclusion filter
+- **F15** - Open token on defined.fi (requires Tampermonkey setup)
 - **Ctrl+F14** (or Ctrl+XButton2) - Register for monitoring
 - **Ctrl+Alt+Q** - Exit script
 - **Right-click tray icon** - Reload or exit
