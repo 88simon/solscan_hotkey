@@ -29,7 +29,7 @@
     // Remove the hash from URL so it doesn't persist
     history.replaceState(null, '', window.location.pathname + window.location.search);
 
-    // Wait for page to be fully loaded before triggering anything
+    // Wait for page to be fully loaded, then trigger search
     let ctrlKSent = false;
 
     function trySearch() {
@@ -102,19 +102,19 @@
                     }));
 
                     console.log('[Defined.fi Auto-Search] Search completed');
-                }, 800);  // Give React time to process the input and show results
+                }, 500);  // Give React time to process the input
             } else {
-                console.log('[Defined.fi Auto-Search] Search input not found yet, will retry...');
+                console.log('[Defined.fi Auto-Search] Search input not found');
             }
-        }, 500);  // Wait 500ms for modal to open after Ctrl+K
+        }, 400);  // Wait 400ms for modal to open after Ctrl+K
     }
 
     // Wait for page to be ready, then try once
     if (document.readyState === 'complete') {
-        setTimeout(trySearch, 1000);  // Wait 1 second for React to fully initialize
+        setTimeout(trySearch, 800);  // Wait 800ms for React to fully initialize
     } else {
         window.addEventListener('load', () => {
-            setTimeout(trySearch, 1000);  // Wait 1 second after load
+            setTimeout(trySearch, 800);  // Wait 800ms after load
         });
     }
 
