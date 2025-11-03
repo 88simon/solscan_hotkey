@@ -29,46 +29,13 @@
     // Remove the hash from URL so it doesn't persist
     history.replaceState(null, '', window.location.pathname + window.location.search);
 
-    // Wait for page to be ready and search component to load
-    let attempts = 0;
-    const maxAttempts = 100; // 10 seconds maximum wait
-    const checkInterval = 100; // Check every 100ms
+    // Wait for page to be fully loaded before triggering anything
+    let ctrlKSent = false;
 
-    const checkAndTriggerSearch = setInterval(() => {
-        attempts++;
-
-        // Safety timeout: stop checking after 10 seconds
-        if (attempts >= maxAttempts) {
-            console.error('[Defined.fi Auto-Search] Timeout: Could not find search elements');
-            clearInterval(checkAndTriggerSearch);
-            return;
-        }
-
-        // Strategy 1: Try to find and click search trigger button
-        // Common selectors for search buttons/triggers on SPAs
-        const searchTriggers = [
-            '[data-search-trigger]',
-            '[aria-label*="Search" i]',
-            '[aria-label*="search" i]',
-            'button[aria-label*="Search" i]',
-            '[data-testid*="search" i]',
-            '.search-trigger',
-            '.search-button'
-        ];
-
-        let searchTrigger = null;
-        for (const selector of searchTriggers) {
-            searchTrigger = document.querySelector(selector);
-            if (searchTrigger) {
-                console.log('[Defined.fi Auto-Search] Found search trigger:', selector);
-                break;
-            }
-        }
-
-        // Strategy 2: Check for Ctrl+K keyboard shortcut listener
-        // If no button found, simulate Ctrl+K (common pattern for search)
-        if (!searchTrigger) {
-            // Try simulating Ctrl+K which is mentioned in the requirements
+    function trySearch() {
+        // Only send Ctrl+K once
+        if (!ctrlKSent) {
+            console.log('[Defined.fi Auto-Search] Dispatching Ctrl+K event');
             const ctrlKEvent = new KeyboardEvent('keydown', {
                 key: 'k',
                 code: 'KeyK',
@@ -79,16 +46,11 @@
                 cancelable: true
             });
             document.dispatchEvent(ctrlKEvent);
-            console.log('[Defined.fi Auto-Search] Dispatched Ctrl+K event');
-        } else {
-            // Click the search trigger
-            searchTrigger.click();
-            console.log('[Defined.fi Auto-Search] Clicked search trigger');
+            ctrlKSent = true;
         }
 
-        // Wait a bit for search input to appear
+        // Wait for search modal to open and input to appear
         setTimeout(() => {
-            // Try to find the search input field
             const searchInputSelectors = [
                 'input[type="search"]',
                 'input[placeholder*="Search" i]',
@@ -111,64 +73,49 @@
             }
 
             if (searchInput) {
-                clearInterval(checkAndTriggerSearch);
-                console.log('[Defined.fi Auto-Search] Found search input, filling with address');
+                console.log('[Defined.fi Auto-Search] Filling search input with address');
 
                 // Focus the input
                 searchInput.focus();
 
-                // Set the value
-                searchInput.value = address;
+                // Set the value using native setter to trigger React
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(searchInput, address);
 
-                // Trigger input events to ensure the app detects the change
-                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-                searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+                // Trigger React's synthetic events
+                const inputEvent = new Event('input', { bubbles: true });
+                searchInput.dispatchEvent(inputEvent);
 
                 console.log('[Defined.fi Auto-Search] Filled input with:', address);
 
-                // Wait a bit for suggestions/results to load, then submit
+                // Wait for React to process the input, then press Enter
                 setTimeout(() => {
-                    // Strategy 1: Try to submit via form
-                    const form = searchInput.closest('form');
-                    if (form) {
-                        console.log('[Defined.fi Auto-Search] Submitting via form');
-                        form.submit();
-                        return;
-                    }
+                    console.log('[Defined.fi Auto-Search] Pressing Enter to search');
 
-                    // Strategy 2: Press Enter key
-                    console.log('[Defined.fi Auto-Search] Submitting via Enter key');
-                    const enterEvent = new KeyboardEvent('keydown', {
+                    searchInput.dispatchEvent(new KeyboardEvent('keydown', {
                         key: 'Enter',
                         code: 'Enter',
                         keyCode: 13,
                         which: 13,
                         bubbles: true,
                         cancelable: true
-                    });
-                    searchInput.dispatchEvent(enterEvent);
-
-                    // Also try keypress and keyup for compatibility
-                    searchInput.dispatchEvent(new KeyboardEvent('keypress', {
-                        key: 'Enter',
-                        code: 'Enter',
-                        keyCode: 13,
-                        which: 13,
-                        bubbles: true
-                    }));
-                    searchInput.dispatchEvent(new KeyboardEvent('keyup', {
-                        key: 'Enter',
-                        code: 'Enter',
-                        keyCode: 13,
-                        which: 13,
-                        bubbles: true
                     }));
 
                     console.log('[Defined.fi Auto-Search] Search completed');
-                }, 300);  // Wait 300ms for autocomplete to load
+                }, 800);  // Give React time to process the input and show results
+            } else {
+                console.log('[Defined.fi Auto-Search] Search input not found yet, will retry...');
             }
-        }, 200);  // Wait 200ms after clicking trigger
+        }, 500);  // Wait 500ms for modal to open after Ctrl+K
+    }
 
-    }, checkInterval);
+    // Wait for page to be ready, then try once
+    if (document.readyState === 'complete') {
+        setTimeout(trySearch, 1000);  // Wait 1 second for React to fully initialize
+    } else {
+        window.addEventListener('load', () => {
+            setTimeout(trySearch, 1000);  // Wait 1 second after load
+        });
+    }
 
 })();
