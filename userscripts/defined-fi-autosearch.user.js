@@ -60,13 +60,13 @@
                 'input[data-testid*="search" i]',
                 '.search-input',
                 '[role="searchbox"]',
-                'input[type="text"]'  // Fallback to any text input
+                'input[type="text"]' // Fallback to any text input
             ];
 
             let searchInput = null;
             for (const selector of searchInputSelectors) {
                 searchInput = document.querySelector(selector);
-                if (searchInput && searchInput.offsetParent !== null) {  // Check if visible
+                if (searchInput && searchInput.offsetParent !== null) { // Check if visible
                     console.log('[Defined.fi Auto-Search] Found search input:', selector);
                     break;
                 }
@@ -102,19 +102,19 @@
                     }));
 
                     console.log('[Defined.fi Auto-Search] Search completed');
-                }, 500);  // Give React time to process the input
+                }, 500); // Give React time to process the input
             } else {
                 console.log('[Defined.fi Auto-Search] Search input not found');
             }
-        }, 400);  // Wait 400ms for modal to open after Ctrl+K
+        }, 400); // Wait 400ms for modal to open after Ctrl+K
     }
 
     // Wait for page to be ready, then try once
     if (document.readyState === 'complete') {
-        setTimeout(trySearch, 800);  // Wait 800ms for React to fully initialize
+        setTimeout(trySearch, 800); // Wait 800ms for React to fully initialize
     } else {
         window.addEventListener('load', () => {
-            setTimeout(trySearch, 800);  // Wait 800ms after load
+            setTimeout(trySearch, 800); // Wait 800ms after load
         });
     }
 
