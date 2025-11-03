@@ -273,6 +273,33 @@ ExtractAddressFromText(text) {
 ; ============================================================================
 ; Helper: Get address and exclusions from current browser URL (Combined)
 ; ============================================================================
+; IMPORTANT: This function depends on Solscan's URL structure
+;
+; URL Structure Dependencies (as of 2025):
+; -----------------------------------------
+; 1. Main address format:
+;    https://solscan.io/account/{ADDRESS}?params...
+;    Regex: "solscan\.io/account/([1-9A-HJ-NP-Za-km-z]{32,44})"
+;
+; 2. Exclusion parameter format:
+;    &to_address=!Addr1,!Addr2,!Addr3
+;    - Parameter name: "to_address"
+;    - Exclusion prefix: "!" (exclamation mark)
+;    - Separator: "," (comma)
+;    - URL encoded: %21 for !, %2C for comma (case insensitive)
+;    Regex: "to_address=([^&]+)"
+;
+; If Solscan changes their URL structure, update the following:
+; - Line ~306: Main address regex pattern
+; - Line ~312: Exclusion parameter name
+; - Line ~316: Exclusion prefix character
+; - Line ~319: Separator character
+;
+; Fallback behavior if parsing fails:
+; - result.address will be "" (empty string)
+; - result.exclusions will be [] (empty array)
+; - Script will show "No Solscan page detected" notification
+; ============================================================================
 
 GetAddressAndExclusionsFromURL() {
     ; Get the current browser URL by copying it from the address bar
@@ -303,23 +330,30 @@ GetAddressAndExclusionsFromURL() {
 
     ; Extract address from Solscan URL
     ; Format: https://solscan.io/account/ADDRESS...
+    ; UPDATE THIS if Solscan changes their URL pattern
     if RegExMatch(currentURL, "solscan\.io/account/([1-9A-HJ-NP-Za-km-z]{32,44})", &match) {
         result.address := match[1]
     }
 
     ; Parse existing exclusions from to_address parameter
-    ; Format: to_address=!Addr1,!Addr2 or to_address=%21Addr1,%21Addr2
+    ; Format: to_address=!Addr1,!Addr2 or to_address=%21Addr1,%21Addr2 or %21Addr1%2C%21Addr2
+    ; UPDATE THIS if Solscan changes their parameter name or format
     if RegExMatch(currentURL, "to_address=([^&]+)", &match) {
         excludeParam := match[1]
 
-        ; URL decode %21 to ! if needed
-        excludeParam := StrReplace(excludeParam, "%21", "!")
+        ; URL decode common characters
+        ; UPDATE THIS if Solscan changes encoding
+        excludeParam := StrReplace(excludeParam, "%21", "!")  ; ! (exclamation)
+        excludeParam := StrReplace(excludeParam, "%2C", ",")  ; , (comma)
+        excludeParam := StrReplace(excludeParam, "%2c", ",")  ; , (comma lowercase)
 
         ; Split by comma to get individual exclusions
+        ; UPDATE THIS if Solscan changes separator
         Loop Parse, excludeParam, ","
         {
             address := A_LoopField
             ; Remove the ! prefix
+            ; UPDATE THIS if Solscan changes exclusion prefix
             if (SubStr(address, 1, 1) == "!") {
                 address := SubStr(address, 2)
             }
@@ -346,29 +380,41 @@ OpenSolscan(address) {
 ; ============================================================================
 ; Action: Reload Page with Exclusions (URL-Based, Per-Tab Persistence)
 ; ============================================================================
+; IMPORTANT: This function builds Solscan URLs with exclusion filters
+;
+; If Solscan changes their URL structure, update the following:
+; - Line ~400: Parameter name "to_address"
+; - Line ~392: Exclusion prefix "!"
+; - Line ~389: Separator character ","
+; - Line ~397-403: Base URL and all other parameters
+; ============================================================================
 
 ReloadPageWithExclusions(mainAddress, exclusionsList) {
     ; Build the exclusion parameter from the list
     ; Format: to_address=!Address1,!Address2,!Address3
+    ; UPDATE THIS if Solscan changes format
     excludeParam := ""
 
     for index, excludeAddr in exclusionsList {
         if (excludeAddr != "") {
             if (excludeParam != "") {
-                excludeParam .= ","
+                excludeParam .= ","  ; UPDATE THIS if separator changes
             }
-            excludeParam .= "!" . excludeAddr
+            excludeParam .= "!" . excludeAddr  ; UPDATE THIS if prefix changes
         }
     }
 
     ; Build URL with exclusion filter
-    url := "https://solscan.io/account/" . mainAddress . "?activity_type=ACTIVITY_SPL_TRANSFER&exclude_amount_zero=true&remove_spam=true"
+    ; UPDATE THIS entire URL structure if Solscan redesigns
+    ; IMPORTANT: Match parameter order from OpenSolscan() to avoid Solscan parsing issues
+    url := "https://solscan.io/account/" . mainAddress . "?activity_type=ACTIVITY_SPL_TRANSFER&exclude_amount_zero=true&remove_spam=true&value=100&value="
 
+    ; Insert to_address BEFORE token_address (same as OpenSolscan)
     if (excludeParam != "") {
-        url .= "&to_address=" . excludeParam
+        url .= "&to_address=" . excludeParam  ; UPDATE THIS parameter name if changed
     }
 
-    url .= "&value=100&value=undefined&token_address=So11111111111111111111111111111111111111111&page_size=10#transfers"
+    url .= "&token_address=So11111111111111111111111111111111111111111&page_size=10#transfers"
 
     ; Copy URL to clipboard
     A_Clipboard := url
