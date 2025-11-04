@@ -1079,11 +1079,9 @@ UpdateWheelMenuHover() {
         }
 
         ; Adjust for our slice layout (first slice centered at top)
-        ; Add 90 to make 0° point up, then add 30 to center slice 1 at north
-        angleDeg := Mod(angleDeg + 90 + 30, 360)
+        angleDeg := Mod(angleDeg + 90, 360)
 
         ; Determine which slice (1-6)
-        ; Each slice is 60° (with 5° gaps we'll add later)
         hoveredSlice := Floor(angleDeg / 60) + 1
         if (hoveredSlice > 6) {
             hoveredSlice := 1
@@ -1108,8 +1106,8 @@ RedrawWheelMenu(hoveredSlice) {
 
     centerX := WheelMenuCenterX
     centerY := WheelMenuCenterY
-    outerRadius := 15      ; Even smaller ring outer edge
-    innerRadius := 10      ; Even smaller ring inner edge
+    outerRadius := 15      ; Larger ring for better visibility and hover accuracy
+    innerRadius := 10      ; Larger inner radius to maintain proportions
 
     ; Clear canvas
     Gdip_GraphicsClear(WheelMenuGraphics, 0x00000000)
@@ -1120,7 +1118,7 @@ RedrawWheelMenu(hoveredSlice) {
     ; Draw 6 thin ring segments with gaps
     Loop 6 {
         sliceIndex := A_Index
-        startAngle := (sliceIndex - 1) * 60 - 90 + 30  ; Rotate by 30° to center slice 1 at north
+        startAngle := (sliceIndex - 1) * 60 - 90  ; slice 1 at north
         sweepAngle := 55  ; 55° slice + 5° gap = 60° total
 
         ; Determine color (brighten if hovered)
@@ -1188,7 +1186,7 @@ RedrawWheelMenu(hoveredSlice) {
 
                 Loop labels.Length {
                     sliceIndex := A_Index
-                    angle := (sliceIndex - 1) * 60 - 90 + 30  ; Center of slice
+                    angle := (sliceIndex - 1) * 60 - 90 + 27.5  ; Center of slice (+ half sweep for true center)
                     angleRad := angle * 3.14159265359 / 180
 
                     ; Calculate position for text box
