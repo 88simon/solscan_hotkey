@@ -14,8 +14,22 @@ Automate Solana wallet and token digging directly from your mouse side buttons. 
 
 ## Core Hotkey Actions
 
+### Wheel Menu (F13 or XButton1)
+Press F13 to open a radial wheel menu with all available actions. Select by:
+- **Mouse gesture**: Move mouse toward desired action and click
+- **Keyboard**: Press number keys 1-6 to instantly select
+- **Cancel**: Press Esc or select option 6
+
+Available wheel menu actions:
+1. Open Solscan - look up the hovered address on Solscan
+2. Add Exclusion - filter out hovered address from current Solscan page
+3. Monitor Address - register address with monitoring service
+4. Defined.fi Lookup - analyze token on defined.fi
+5. Analyze Token - queue early bidder analysis via Helius API
+6. Cancel - close menu without action
+
+### Direct Hotkeys
 - `F14` or `XButton2`: open the selected Solana address on Solscan with opinionated filters.
-- `F13` or `XButton1`: append the hovered address as an exclusion filter on the current Solscan tab.
 - `F15`: launch defined.fi and auto-search the hovered token mint (requires the Tampermonkey userscript).
 - `F16`: queue an "early bidder" analysis job through the monitoring service (Helius API key required).
 - `Ctrl + F14`: register an address with the monitoring service for future alerts.
