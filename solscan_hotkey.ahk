@@ -64,6 +64,16 @@ F13::HandleSolscanLookupWithExclude()
 F15::HandleDefinedFiLookup()
 
 ; ============================================================================
+; TOKEN ANALYSIS HOTKEY: F16
+; ============================================================================
+; Analyze token for early bidders (requires monitor service + Helius API)
+; Hover over token address + press F16
+; Results available at http://localhost:5001/analysis
+; ============================================================================
+
+F16::HandleTokenAnalysis()
+
+; ============================================================================
 ; Core Function: Capture text and open Solscan
 ; ============================================================================
 
@@ -554,6 +564,79 @@ HandleDefinedFiLookup() {
 }
 
 ; ============================================================================
+; Token Analysis: Analyze token for early bidders using Helius API
+; ============================================================================
+
+HandleTokenAnalysis() {
+    ; Save original clipboard
+    ClipSaved := ClipboardAll()
+    A_Clipboard := ""
+
+    ; Try to capture text under cursor
+    capturedText := CaptureTextUnderCursor()
+
+    ; Restore clipboard immediately
+    A_Clipboard := ClipSaved
+    ClipSaved := ""
+
+    ; Process captured text
+    if (capturedText != "") {
+        ; Extract address from text
+        address := ExtractAddressFromText(capturedText)
+
+        ; If extraction found nothing, check if the whole text is a valid address
+        if (address == "" && IsValidSolanaAddress(capturedText)) {
+            address := capturedText
+        }
+
+        ; Validate and analyze
+        if (address != "" && IsValidSolanaAddress(address)) {
+            ; Send to analysis service
+            AnalyzeTokenWithService(address)
+        } else {
+            ShowNotification("Invalid token address", "Must be 32-44 character Solana address")
+        }
+    } else {
+        ShowNotification("No text captured", "Hover over a token address and try again")
+    }
+}
+
+AnalyzeTokenWithService(tokenAddress) {
+    ; Build JSON payload
+    jsonData := '{"address":"' . tokenAddress . '","min_usd":50,"time_window_hours":24}'
+
+    ; Create temporary file for curl
+    tempFile := A_Temp . "\solscan_analyze.json"
+    try {
+        FileDelete tempFile
+    }
+    FileAppend jsonData, tempFile
+
+    ; Send POST request to analysis endpoint
+    analysisUrl := "http://localhost:5001/analyze/token"
+    command := 'curl -X POST "' . analysisUrl . '" -H "Content-Type: application/json" -d @"' . tempFile . '" 2>&1'
+
+    try {
+        result := RunWait('cmd /c ' . command, , "Hide")
+
+        if (result = 0) {
+            ShowNotification("Analysis queued", "View results at localhost:5001")
+            ; Optionally open browser to results
+            Run "http://localhost:5001/analysis"
+        } else {
+            ShowNotification("Analysis service offline", "Start monitor service first")
+        }
+    } catch {
+        ShowNotification("Analysis service offline", "Start monitor service first")
+    }
+
+    ; Cleanup
+    try {
+        FileDelete tempFile
+    }
+}
+
+; ============================================================================
 ; UI Feedback: Toast Notification
 ; ============================================================================
 
@@ -580,4 +663,4 @@ ShowNotification(title, message) {
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Reload Script", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => ExitApp())
-A_IconTip := "Solscan Hotkey Active`nF14: Open address`nF13: Add exclusion`nCtrl+F14: Monitor address`nF15: Defined.fi lookup"
+A_IconTip := "Solscan Hotkey Active`nF14: Open address`nF13: Add exclusion`nCtrl+F14: Monitor address`nF15: Defined.fi lookup`nF16: Analyze token"

@@ -1,182 +1,101 @@
-# Solana Address Monitoring Service
+# Monitoring and Analysis Service
 
-A local Flask service that stores and manages Solana addresses for future Telegram monitoring.
+Local Flask service that complements the AutoHotkey script. It stores wallet addresses for future alerts, powers the F16 token analysis flow, and surfaces results through a dashboard and REST API.
 
-## Current Status: Phase 1 MVP
+## Feature Snapshot
 
-This is a storage-only implementation. Future phases will add:
-- Telegram bot integration
-- Real-time transaction notifications
-- Configurable thresholds per address
+- **Address watchlist**: register wallets from `Ctrl + F14` or the web UI, add notes, export to JSON.
+- **Token analysis jobs**: queue mint addresses from F16, collect earliest buyers and large transfers (Helius API).
+- **Dashboard**: manage addresses, review analysis output, download CSVs, verify service health.
+- **REST/JSON API**: integrate with other tooling or scripted workflows.
 
 ## Requirements
 
-- Python 3.8+
-- Flask (auto-installed by launcher)
+- Windows or macOS with Python 3.9 or newer.
+- Internet access when Helius data is requested.
+- Helius API key (free tier works) if you intend to run analysis jobs.
 
-## Installation
+The service binds to `localhost` only, so nothing is exposed externally by default.
 
-### Quick Start
+## Quick Start
 
-1. Double-click `start_monitor_service.bat`
-2. The script will automatically install Flask if needed
-3. Service runs at `http://localhost:5001`
+1. Copy `config.example.json` to `config.json` and add your Helius API key if you have one.
+2. Double-click `start_monitor_service.bat` (or run `python monitor_service.py`). Dependencies install automatically the first time.
+3. Visit http://localhost:5001 and confirm the dashboard loads.
 
-### Manual Installation
+## Integrating With the Hotkey Script
 
-```bash
-cd monitor
-pip install -r requirements.txt
-python monitor_service.py
-```
-
-## Usage
-
-### Registering Addresses
-
-**From AutoHotkey script:**
-- Hover over any Solana address
-- Hold Ctrl + Click F14 (or Ctrl+XButton2)
-
-**From web dashboard:**
-1. Visit `http://localhost:5001`
-2. Enter address in the form
-3. Optionally add a note/tag (e.g., "whale wallet", "friend")
-
-### Web Dashboard
-
-Open `http://localhost:5001` in your browser to:
-- View all monitored addresses
-- Add/remove addresses manually
-- Edit notes/tags
-- Export backup (JSON)
-- Import from backup
-- Search addresses by address or note
-
-### API Endpoints
-
-```
-POST   /register              - Register new address
-GET    /addresses             - List all addresses
-GET    /address/<addr>        - Get address details
-DELETE /address/<addr>        - Remove address
-PUT    /address/<addr>/note   - Update address note
-POST   /import                - Import addresses from backup
-POST   /clear                 - Clear all addresses
-GET    /health                - Health check
-```
-
-## Data Storage
-
-Addresses are stored in `monitored_addresses.json`:
-
-```json
-{
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": {
-    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-    "registered_at": "2025-11-02T10:30:00",
-    "threshold": 100,
-    "total_notifications": 0,
-    "last_notification": null,
-    "note": "Example wallet"
-  }
-}
-```
-
-**Note:** This file is git-ignored to protect your privacy.
+- **Register address (Ctrl + F14)**: hover a wallet, hold `Ctrl`, press F14. The address shows up in the dashboard immediately.
+- **Token analysis (F16)**: hover a token mint and press F16. A job is queued and the dashboard opens to `/analysis` once the Helius call completes.
 
 ## Configuration
 
-### Default Settings
+`config.json` accepts the following keys:
 
-- **Port:** 5001
-- **Host:** localhost (not accessible from network)
-- **Default Threshold:** 100 SOL (for future notifications)
-
-### Changing Port
-
-Edit `monitor_service.py` line 306:
-
-```python
-app.run(host='localhost', port=5001, debug=False)
+```json
+{
+  "helius_api_key": "YOUR_KEY",
+  "default_threshold": 100,
+  "analysis_min_usd": 50,
+  "analysis_window_hours": 24
+}
 ```
 
-## Backup & Restore
+- Leave out `helius_api_key` to disable analysis jobs.
+- Override values with environment variables such as `HELIUS_API_KEY` when needed.
 
-### Export Backup
+## Data Storage
 
-1. Visit dashboard at `http://localhost:5001`
-2. Click "Export Backup"
-3. JSON file downloads automatically
+- `monitored_addresses.json` holds the watchlist (git-ignored).
+- `analysis_results/` caches job outputs for later review and CSV export.
 
-### Import Backup
+Back up these files if you want to migrate the service.
 
-1. Visit dashboard
-2. Click "Import Backup"
-3. Select previously exported JSON file
+## REST API Reference
 
-### Manual Backup
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/register` | Register a wallet (`{"address": "...", "note": "..."}`) |
+| `GET` | `/addresses` | List watchlist entries |
+| `GET` | `/address/<address>` | Retrieve details |
+| `PUT` | `/address/<address>/note` | Update the note or tag |
+| `DELETE` | `/address/<address>` | Remove an entry |
+| `POST` | `/import` | Import addresses from JSON |
+| `POST` | `/clear` | Clear the watchlist |
+| `GET` | `/analysis` | List analysis jobs |
+| `POST` | `/analysis` | Queue a job (`{"token_address": "...", "min_usd": 50}`) |
+| `GET` | `/analysis/<job_id>` | Job metadata and summary |
+| `GET` | `/analysis/<job_id>/results` | Render results in HTML |
+| `GET` | `/analysis/<job_id>/csv` | Download CSV export |
+| `GET` | `/health` | Health check endpoint |
 
-Copy `monitored_addresses.json` to safe location.
+All routes return JSON unless noted.
+
+## Dashboard Highlights
+
+- **Home**: add wallets, search, import/export, edit notes.
+- **Analysis**: earliest buyers, USD spent, transaction counts, CSV download.
+- **Navigation**: quick links to watchlist, job list, and health page.
 
 ## Troubleshooting
 
-### Service won't start
+- **Service will not start**: verify Python 3.9+ is on PATH by running `python --version`. If port 5001 is busy, edit the `app.run` call near the end of `monitor_service.py`.
+- **Helius errors**: confirm the API key is present in `config.json` or provided via `HELIUS_API_KEY`. Watch the console for rate limit messages.
+- **Hotkey cannot register addresses**: visit http://localhost:5001/health. If the check passes, ensure the address is valid base58 (32-44 characters). If the check fails, restart the service.
+- **CSV export empty**: ensure the token actually has transfers within the configured USD threshold and time window.
 
-**Port already in use:**
-```bash
-# Check what's using port 5001
-netstat -ano | findstr :5001
+## Development Tips
 
-# Kill the process or change port in monitor_service.py
-```
+- Run `pip install -r requirements.txt` to mirror the batch script manually.
+- Use `flask --app monitor_service.py run --debug` for live reload while adjusting the UI.
+- Mock Helius by setting `HELIUS_API_KEY=dummy` and enabling the sample-data path in the source (search for `USE_SAMPLE_DATA`).
 
-**Python not found:**
-- Install Python 3.8+ from [python.org](https://www.python.org/downloads/)
-- During installation, check "Add Python to PATH"
+## Roadmap
 
-**Flask installation fails:**
-```bash
-python -m pip install --upgrade pip
-pip install Flask
-```
-
-### Can't access dashboard
-
-- Verify service is running (console should show "Running on http://localhost:5001")
-- Check browser URL is exactly `http://localhost:5001` (not https)
-- Try different browser if issues persist
-
-### Address not registering from hotkey
-
-1. Verify service is running at `http://localhost:5001/health`
-2. Check console for error messages
-3. Ensure address is valid Solana base58 (32-44 characters)
-
-## Security & Privacy
-
-- Service only listens on localhost (not accessible from network)
-- No external API calls (except future Telegram integration)
-- Data stored locally in `monitored_addresses.json`
-- File is git-ignored by default
-
-## Future Roadmap
-
-### Phase 2: Configuration System
-- YAML config file for flexible settings
-- Per-address thresholds
-- Multiple notification methods
-
-### Phase 3: Telegram Integration
-- Bot token configuration
-- Real-time transaction monitoring
-- Customizable alert messages
-
-### Phase 4: Advanced Features
-- Webhook support
-- Discord integration
-- Historical analytics
+1. Phase 2: richer config, per-address thresholds, better tagging.
+2. Phase 3: Telegram bot integration and push notifications.
+3. Phase 4: webhook support (Discord, custom) and historical analytics.
 
 ---
 
-**License:** Free to use and modify. No warranty provided.
+The monitoring service is optional but unlocks the longer-term wallet tracking workflow envisioned for the control room.

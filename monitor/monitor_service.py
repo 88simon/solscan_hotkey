@@ -10,20 +10,62 @@ Version: 1.0 (Phase 1 - MVP)
 ============================================================================
 """
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 from datetime import datetime
 import json
 import os
 import re
+import uuid
+from threading import Thread
+import csv
+import io
 
 app = Flask(__name__)
 
 # Configuration
 DATA_FILE = "monitored_addresses.json"
+ANALYSIS_RESULTS_DIR = "analysis_results"
 DEFAULT_THRESHOLD = 100  # Default SOL threshold for notifications
+
+# Helius API key (read from environment or config file)
+# Set via environment variable: set HELIUS_API_KEY=your-key-here
+# Or create config.json with {"helius_api_key": "your-key-here"}
+def load_api_key():
+    """Load Helius API key from environment or config file"""
+    # Try environment variable first
+    api_key = os.environ.get('HELIUS_API_KEY')
+    if api_key:
+        return api_key
+
+    # Try config.json
+    config_file = 'config.json'
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                return config.get('helius_api_key')
+        except Exception as e:
+            print(f"⚠ Error loading config.json: {e}")
+
+    print("⚠ WARNING: No Helius API key found!")
+    print("   Set HELIUS_API_KEY environment variable or create config.json")
+    print("   Example config.json: {\"helius_api_key\": \"your-key-here\"}")
+    return None
+
+HELIUS_API_KEY = load_api_key()
 
 # In-memory storage (backed by JSON file)
 monitored_addresses = {}
+analysis_jobs = {}  # job_id -> {status, result, error}
+
+# Import Helius API
+try:
+    from helius_api import TokenAnalyzer
+    helius_enabled = True
+    print("✓ Helius API module loaded")
+except ImportError as e:
+    helius_enabled = False
+    print(f"⚠ Helius API not available: {e}")
 
 
 def load_addresses():
@@ -267,6 +309,197 @@ def clear_all():
     }), 200
 
 
+# ============================================================================
+# Token Analysis Endpoints
+# ============================================================================
+
+def run_token_analysis(job_id, token_address, min_usd, time_window_hours):
+    """Background worker function to analyze a token"""
+    try:
+        print(f"[Job {job_id}] Starting analysis for {token_address}")
+        analysis_jobs[job_id]['status'] = 'processing'
+
+        analyzer = TokenAnalyzer(HELIUS_API_KEY)
+        result = analyzer.analyze_token(
+            mint_address=token_address,
+            min_usd=min_usd,
+            time_window_hours=time_window_hours
+        )
+
+        # Convert datetime objects to strings for JSON serialization
+        for bidder in result.get('early_bidders', []):
+            if 'first_buy_time' in bidder and hasattr(bidder['first_buy_time'], 'isoformat'):
+                bidder['first_buy_time'] = bidder['first_buy_time'].isoformat()
+
+        # Save result to file
+        os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
+        result_file = os.path.join(ANALYSIS_RESULTS_DIR, f"{job_id}.json")
+        with open(result_file, 'w') as f:
+            json.dump(result, f, indent=2)
+
+        analysis_jobs[job_id]['status'] = 'completed'
+        analysis_jobs[job_id]['result'] = result
+        analysis_jobs[job_id]['completed_at'] = datetime.now().isoformat()
+
+        print(f"[Job {job_id}] Analysis complete - found {result['total_unique_buyers']} early bidders")
+
+    except Exception as e:
+        print(f"[Job {job_id}] Analysis failed: {str(e)}")
+        analysis_jobs[job_id]['status'] = 'failed'
+        analysis_jobs[job_id]['error'] = str(e)
+
+
+@app.route('/analyze/token', methods=['POST'])
+def analyze_token():
+    """
+    Analyze a token to find early bidders
+
+    Expected JSON payload:
+    {
+        "address": "TokenMintAddress...",
+        "min_usd": 50,  # optional, default 50
+        "time_window_hours": 24  # optional, default 24
+    }
+    """
+    if not helius_enabled:
+        return jsonify({
+            "error": "Helius API not available. Install dependencies: pip install requests solana base58"
+        }), 503
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        token_address = data.get('address', '').strip()
+
+        if not is_valid_solana_address(token_address):
+            return jsonify({"error": "Invalid Solana address format"}), 400
+
+        # Get analysis parameters
+        min_usd = float(data.get('min_usd', 50))
+        time_window_hours = int(data.get('time_window_hours', 24))
+
+        # Create analysis job
+        job_id = str(uuid.uuid4())[:8]
+        analysis_jobs[job_id] = {
+            'job_id': job_id,
+            'token_address': token_address,
+            'status': 'queued',
+            'min_usd': min_usd,
+            'time_window_hours': time_window_hours,
+            'created_at': datetime.now().isoformat(),
+            'result': None,
+            'error': None
+        }
+
+        # Start background analysis
+        thread = Thread(target=run_token_analysis, args=(job_id, token_address, min_usd, time_window_hours))
+        thread.daemon = True
+        thread.start()
+
+        print(f"✓ Queued token analysis: {token_address} (Job ID: {job_id})")
+
+        return jsonify({
+            'status': 'queued',
+            'job_id': job_id,
+            'token_address': token_address,
+            'min_usd': min_usd,
+            'time_window_hours': time_window_hours,
+            'results_url': f'/analysis/{job_id}'
+        }), 202
+
+    except Exception as e:
+        print(f"⚠ Error in /analyze/token: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/analysis/<job_id>', methods=['GET'])
+def get_analysis(job_id):
+    """Get analysis results by job ID"""
+    if job_id not in analysis_jobs:
+        return jsonify({"error": "Job not found"}), 404
+
+    job = analysis_jobs[job_id]
+
+    # If completed, ensure result is loaded
+    if job['status'] == 'completed' and job['result'] is None:
+        try:
+            result_file = os.path.join(ANALYSIS_RESULTS_DIR, f"{job_id}.json")
+            with open(result_file, 'r') as f:
+                job['result'] = json.load(f)
+        except Exception as e:
+            job['status'] = 'failed'
+            job['error'] = f"Could not load results: {str(e)}"
+
+    return jsonify(job), 200
+
+
+@app.route('/analysis/<job_id>/csv', methods=['GET'])
+def export_analysis_csv(job_id):
+    """Export analysis results as CSV"""
+    if job_id not in analysis_jobs:
+        return jsonify({"error": "Job not found"}), 404
+
+    job = analysis_jobs[job_id]
+
+    if job['status'] != 'completed' or not job.get('result'):
+        return jsonify({"error": "Analysis not completed or no results"}), 400
+
+    try:
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write header
+        writer.writerow(['Wallet Address', 'First Buy Time', 'Total USD', 'Transaction Count', 'Average Buy USD'])
+
+        # Write data
+        for bidder in job['result'].get('early_bidders', []):
+            writer.writerow([
+                bidder['wallet_address'],
+                bidder['first_buy_time'],
+                f"${bidder['total_usd']:.2f}",
+                bidder['transaction_count'],
+                f"${bidder['average_buy_usd']:.2f}"
+            ])
+
+        # Prepare response
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'token_analysis_{job_id}.csv'
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"CSV export failed: {str(e)}"}), 500
+
+
+@app.route('/analysis/<job_id>/results', methods=['GET'])
+def view_analysis_results(job_id):
+    """View analysis results in HTML"""
+    if job_id not in analysis_jobs:
+        return "Job not found", 404
+
+    job = analysis_jobs[job_id]
+    return render_template('analysis_results.html', job=job)
+
+
+@app.route('/analysis', methods=['GET'])
+def list_analyses():
+    """List all analysis jobs"""
+    return jsonify({
+        'total': len(analysis_jobs),
+        'jobs': list(analysis_jobs.values())
+    }), 200
+
+
+# ============================================================================
+# Dashboard Routes
+# ============================================================================
+
 @app.route('/')
 def dashboard():
     """Serve web dashboard"""
@@ -287,15 +520,26 @@ if __name__ == '__main__':
 
     print("-" * 70)
     print("Available endpoints:")
-    print("  GET    /                      - Web Dashboard")
-    print("  POST   /register              - Register new address")
-    print("  GET    /addresses             - List all addresses")
-    print("  GET    /address/<addr>        - Get address details")
-    print("  DELETE /address/<addr>        - Remove address")
-    print("  PUT    /address/<addr>/note   - Update address note")
-    print("  POST   /import                - Import addresses from backup")
-    print("  GET    /health                - Health check")
-    print("  POST   /clear                 - Clear all addresses")
+    print("  GET    /                           - Web Dashboard")
+    print("  POST   /register                   - Register new address")
+    print("  GET    /addresses                  - List all addresses")
+    print("  GET    /address/<addr>             - Get address details")
+    print("  DELETE /address/<addr>             - Remove address")
+    print("  PUT    /address/<addr>/note        - Update address note")
+    print("  POST   /import                     - Import addresses from backup")
+    print("  GET    /health                     - Health check")
+    print("  POST   /clear                      - Clear all addresses")
+    print()
+    print("  POST   /analyze/token              - Analyze token for early bidders")
+    print("  GET    /analysis                   - List all analysis jobs")
+    print("  GET    /analysis/<job_id>          - Get analysis status/results")
+    print("  GET    /analysis/<job_id>/results  - View results in browser")
+    print("  GET    /analysis/<job_id>/csv      - Export results as CSV")
+    print("-" * 70)
+    if helius_enabled:
+        print("✓ Helius API enabled - Token analysis ready")
+    else:
+        print("⚠ Helius API disabled - Run: pip install requests solana base58")
     print("-" * 70)
     print("\n📊 Open http://localhost:5001 in your browser to access the dashboard")
     print("Press Ctrl+C to stop the server")

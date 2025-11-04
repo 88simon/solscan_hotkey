@@ -1,193 +1,99 @@
-# Solscan Mouse Hotkey
+# Solscan Hotkey Toolkit
 
-Instantly open Solscan for any Solana address by hovering and clicking your side mouse button.
+Automate Solana wallet and token digging directly from your mouse side buttons. The toolkit couples a fast AutoHotkey script with optional browser automation and a local monitoring service.
 
-## Overview
+## Project Layout
 
-This project has two components:
+| Path | Purpose |
+| --- | --- |
+| `solscan_hotkey.ahk` | Primary AutoHotkey script (F13, F14, F15, F16 bindings) |
+| `start_solscan_hotkey.bat` | Helper launcher for the hotkey script |
+| `userscripts/defined-fi-autosearch.user.js` | Tampermonkey helper for defined.fi token lookup |
+| `monitor/` | Flask monitoring and analysis service (see `monitor/README.md`) |
+| `test_buttons.ahk`, `test_mouse_buttons.ahk` | Diagnostics for mapping mouse buttons |
 
-1. **Hotkey Script (Stable)** - AutoHotkey script for instant Solscan lookups and filtering
-2. **Monitoring Service (Beta)** - Python/Flask service for tracking addresses (future Telegram notifications)
+## Core Hotkey Actions
 
-See [monitor/README.md](monitor/README.md) for monitoring service documentation.
-
-## Hotkey Features
-
-- **F14/XButton2**: Open any Solana address in Solscan with custom filters
-- **F13/XButton1**: Add exclusion filters to current Solscan page (per-tab persistence)
-- **F15**: Open Solana token on defined.fi with automatic search (requires Tampermonkey)
-- **Ctrl+F14**: Register addresses for Telegram monitoring (requires monitor service)
-- Smart text detection with multiple fallback strategies
-- Safe clipboard handling - restores your clipboard after use
-- Validates Solana base58 addresses (32-44 characters)
+- `F14` or `XButton2`: open the selected Solana address on Solscan with opinionated filters.
+- `F13` or `XButton1`: append the hovered address as an exclusion filter on the current Solscan tab.
+- `F15`: launch defined.fi and auto-search the hovered token mint (requires the Tampermonkey userscript).
+- `F16`: queue an "early bidder" analysis job through the monitoring service (Helius API key required).
+- `Ctrl + F14`: register an address with the monitoring service for future alerts.
+- `Ctrl + Alt + Q`: exit the AutoHotkey script.
 
 ## Requirements
 
-- **Windows** 10 or later
-- **AutoHotkey v2.0+** - [Download here](https://www.autohotkey.com/)
-- A mouse with side buttons (or Logitech G502/similar with G HUB)
+- Windows 10 or later.
+- AutoHotkey v2.0 or newer.
+- Mouse with two side buttons or vendor software that can emit F13-F16.
 
-**Optional (for Telegram Monitoring):**
-- Python 3.8+ and Flask (auto-installed by launcher)
+Optional components:
 
-## Installation
+- Tampermonkey (Chrome, Edge, or Firefox) for the defined.fi automation.
+- Python 3.9+ for the monitoring service.
+- Helius API key (free tier works for light use) for token analysis.
 
-### 1. Install AutoHotkey v2
+## Quick Start (Hotkey Only)
 
-Download and install AutoHotkey v2 from [autohotkey.com](https://www.autohotkey.com/)
+1. Install AutoHotkey v2 from https://www.autohotkey.com/.
+2. Logitech G HUB users: map side buttons to F13 and F14. Other mice can rely on native `XButton1` and `XButton2`.
+3. Double-click `start_solscan_hotkey.bat` (or the `.ahk` file directly). Look for the green "H" tray icon.
+4. Hover over a Solana address and press F14 or XButton2. Solscan opens with large-transfer filters already applied.
 
-**Important:** Install v2.0+, not v1.1
-
-### 2. Configure Your Mouse (G HUB Users Only)
-
-If you have Logitech G HUB:
-
-1. Open G HUB and select your mouse profile
-2. Map your side buttons:
-   - One button → `F14` (for opening addresses)
-   - Other button → `F13` (for exclusions)
-3. Save the profile
-
-**Why F13/F14?** G HUB blocks native XButton signals. F13/F14 are extended function keys that work reliably.
-
-**No G HUB?** The script works directly with XButton1/XButton2. Skip this step.
-
-### 3. Run the Script
-
-**Recommended:** Double-click `start_solscan_hotkey.bat`
-
-**Or manually:** Double-click `solscan_hotkey.ahk` (green "H" icon appears in system tray)
-
-**Auto-start on boot:** Press Win+R, type `shell:startup`, create a shortcut to `solscan_hotkey.ahk`
-
-## Usage
-
-### Basic Lookup (F14)
-
-1. Hover over any Solana address
-2. Click F14-mapped button (or XButton2)
-3. Solscan opens with filters: SOL transfers only, no spam, 100+ SOL minimum
-
-### Exclusion Filters (F13)
-
-Filter out specific addresses to focus on interesting counterparties.
-
-**Workflow:**
-1. Open a wallet on Solscan (using F14 or manually)
-2. Hover over addresses you want to exclude (DEXs, exchanges, etc.)
-3. Click F13 to add exclusion - page reloads with that address filtered out
-4. Repeat to exclude more addresses (up to 5 max due to Solscan limits)
-
-**Per-tab persistence:** Exclusions are stored in the browser URL. Each tab maintains independent filters - switch tabs freely, reload manually, F13 always works on the current tab.
-
-**Example:**
-Analyzing whale wallet? Exclude Jupiter, Raydium, Pump.fun to see only novel counterparties.
+## Optional Integrations
 
 ### Defined.fi Token Lookup (F15)
 
-Research Solana tokens instantly on defined.fi.
+1. Install Tampermonkey and create a new userscript.
+2. Paste the contents of `userscripts/defined-fi-autosearch.user.js`.
+3. Hover over a token mint and press F15. Defined.fi opens, triggers its Ctrl+K search, inserts the mint, and navigates to the token.
 
-**Setup (one-time):**
-1. Install Tampermonkey browser extension ([Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) | [Firefox](https://addons.mozilla.org/firefox/addon/tampermonkey/) | [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd))
-2. Open `userscripts/defined-fi-autosearch.user.js` in a text editor
-3. Copy the entire contents
-4. Click Tampermonkey icon → Dashboard → "+" (Create new script)
-5. Paste the script and save (Ctrl+S)
+### Token Early-Bidder Analysis (F16)
 
-**Usage:**
-1. Hover over any Solana token address
-2. Press F15 on your keyboard
-3. Defined.fi opens and automatically searches for the token
+1. Copy `monitor/config.example.json` to `monitor/config.json`.
+2. Add your Helius API key: `{"helius_api_key": "YOUR_KEY"}`.
+3. Launch `monitor/start_monitor_service.bat`. Dependencies install automatically and a Flask app starts on http://localhost:5001.
+4. Hover any token mint and press F16. A job is queued; the browser opens to the job dashboard with earliest buyers, USD spent, and CSV export.
 
-**How it works:** The AutoHotkey script opens defined.fi with a special URL parameter. The Tampermonkey UserScript detects this parameter, triggers the site's search (Ctrl+K), fills in the address, and submits it automatically.
+### Address Watchlist (Ctrl + F14)
 
-### Telegram Monitoring (Beta)
+1. Make sure the monitoring service is running.
+2. Hover a wallet address, hold Ctrl, and press F14. The address is stored in `monitor/monitored_addresses.json`.
+3. Visit http://localhost:5001 to review, tag, or export the watchlist. Telegram notifications are planned for later phases; see `monitor/README.md` for the roadmap.
 
-**Start service:**
-1. Navigate to `monitor/` folder
-2. Double-click `start_monitor_service.bat`
-3. Service runs at `http://localhost:5001`
+## Directory Tips
 
-**Register addresses:**
-- Hover over address → Hold Ctrl + Click F14/XButton2
-- View registered addresses at `http://localhost:5001` (web dashboard)
-
-**Current status:** Phase 1 MVP - stores addresses locally, no actual notifications yet.
-
-See [monitor/README.md](monitor/README.md) for full monitoring documentation.
-
-## Controls
-
-- **F14** (or XButton2) - Open address in Solscan
-- **F13** (or XButton1) - Add exclusion filter
-- **F15** - Open token on defined.fi (requires Tampermonkey setup)
-- **Ctrl+F14** (or Ctrl+XButton2) - Register for monitoring
-- **Ctrl+Alt+Q** - Exit script
-- **Right-click tray icon** - Reload or exit
+- You can run the hotkey script on its own. The monitoring service is optional and lives entirely inside `monitor/`.
+- Local state such as watchlists and analysis artifacts is git-ignored.
+- Keep browser helpers like Tampermonkey scripts under `userscripts/` so they are easy to version and share.
 
 ## Troubleshooting
 
-### Mouse button not working
+- **Mouse buttons not triggering:** confirm AutoHotkey is running, then use `test_mouse_buttons.ahk` to verify which button maps to which key. Rebind keys in vendor software if needed.
+- **Defined.fi search fails:** ensure the userscript is enabled and the site has finished loading. Refresh the page after installing or editing the script.
+- **Monitoring service unavailable:** verify `python --version` works inside the `monitor` folder and that the console prints `Running on http://localhost:5001`. Check that port 5001 is free.
+- **Invalid address pop-up:** only base58 addresses 32-44 characters long are accepted. Highlight the clean address without quotes or punctuation.
 
-**G HUB users:**
-1. Verify buttons are mapped to F13/F14 in G HUB
-2. Ensure profile is active (not "Default")
-3. Reload script: Right-click tray icon → Reload
-4. Test by pressing F13/F14 on keyboard - should see tooltip
+Additional troubleshooting, API endpoints, and configuration details are in `monitor/README.md`.
 
-**Non-G HUB users:**
-1. Check green "H" icon in system tray
-2. Run `test_buttons.ahk` to identify which button is which
-3. Check if mouse software is intercepting the button
+## Customization Hints
 
-**Still not working?**
-- Restart computer after changing G HUB settings
-- Enable "Persistent Profile" in G HUB
-- Test keys directly in Notepad
+- Tweak Solscan filters, notification timing, and hotkey bindings directly in `solscan_hotkey.ahk`.
+- Modify the defined.fi userscript to apply extra filters (for example a minimum USD size) once you inspect the page in DevTools.
+- Extend the monitoring service with new endpoints or schedulers; it already exposes `/analysis`, `/addresses`, and CSV exports.
 
-### Monitor service offline
+## Uninstall
 
-See [monitor/README.md](monitor/README.md) for detailed troubleshooting.
+1. Exit the AutoHotkey script (tray icon -> Exit or Ctrl + Alt + Q).
+2. Remove any shortcuts from the Windows Startup folder.
+3. Delete the repository directory. Optionally uninstall AutoHotkey or Python if you no longer need them.
 
-### Invalid address error
+## Security Notes
 
-- Ensure address is fully visible (not truncated)
-- Remove quotes, brackets, or extra spaces
-- Try highlighting the address manually first
-- Address must be 32-44 characters, base58 encoded
-
-### Other issues
-
-**Clipboard disrupted:** Script auto-restores clipboard. If issues persist, close clipboard managers temporarily.
-
-**Works in browser but not Terminal/IDE:** Some apps require manual text selection first.
-
-**Wrong/partial address:** Ensure address is separated by spaces/punctuation, not mixed with other text.
-
-## Customization
-
-Edit `solscan_hotkey.ahk` in any text editor:
-
-- Line 21: `NOTIFICATION_DURATION` - Toast notification length (ms)
-- Line 22: `SELECTION_DELAY` - Text selection timing (increase if capture fails)
-- Line 376: Modify Solscan URL filters
-
-## Uninstallation
-
-1. Right-click tray icon → Exit
-2. Remove from Startup folder if added
-3. Delete folder
-4. Optionally uninstall AutoHotkey
-
-## Security & Privacy
-
-- Runs locally - no network calls except opening Solscan
-- Does not log or store data (except monitoring addresses)
-- Clipboard fully restored after use
-- Open source - inspect the code yourself
+- All scripts run locally. The hotkey opens Solscan and defined.fi in your browser; the monitoring service only reaches out to Helius when configured.
+- Clipboard contents are restored after each hotkey run.
+- Watchlist data stays in `monitor/monitored_addresses.json`, which is ignored by git.
 
 ---
 
-**License:** Free to use and modify. No warranty provided.
-
-**Enjoy instant Solscan lookups!** Share with other Solana devs.
+Enjoy faster Solana due diligence. Contributions, feedback, and new hotkey ideas are welcome.

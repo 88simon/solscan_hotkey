@@ -4,8 +4,10 @@
 # This file tells Git which files to never commit to GitHub
 # ============================================================================
 
-# Private data - monitored addresses
+# Private data - monitored addresses and analysis results
 monitor/monitored_addresses.json
+monitor/analysis_results/
+monitor/config.json
 
 # Python cache and temp files
 monitor/__pycache__/
