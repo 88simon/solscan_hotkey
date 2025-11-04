@@ -25,17 +25,34 @@ CoordMode "Mouse", "Screen"
 
 Gdip_Startup() {
     static loaded := false
-    if (!loaded)
+    static loadedToken := 0
+
+    ; If already initialized, return existing token
+    if (loaded && loadedToken) {
+        return loadedToken
+    }
+
+    ; Load GDI+ library
+    if (!loaded) {
         DllCall("LoadLibrary", "str", "gdiplus.dll", "Ptr")
+    }
+
+    ; Initialize GDI+
     si := Buffer(16, 0)
     NumPut("UInt", 1, si, 0)                    ; GdiplusVersion
     NumPut("UInt", 0, si, 4)                    ; DebugEventCallback
     NumPut("UInt", 0, si, 8)                    ; SuppressBackgroundThread
     NumPut("UInt", 0, si, 12)                   ; SuppressExternalCodecs
     token := 0
-    if (DllCall("gdiplus\GdiplusStartup", "Ptr*", &token, "Ptr", si, "Ptr", 0, "UInt"))
+    status := DllCall("gdiplus\GdiplusStartup", "Ptr*", &token, "Ptr", si, "Ptr", 0, "UInt")
+
+    if (status != 0 || token == 0) {
+        MsgBox("GDI+ initialization failed!`nStatus: " . status . "`nToken: " . token . "`n`nTry reloading the script (Ctrl+R)")
         return 0
+    }
+
     loaded := true
+    loadedToken := token
     return token
 }
 
@@ -85,6 +102,60 @@ Gdip_FillPie(graphics, brush, x, y, w, h, startAngle, sweepAngle) {
 Gdip_FillEllipse(graphics, brush, x, y, w, h) {
     return DllCall("gdiplus\GdipFillEllipse", "Ptr", graphics, "Ptr", brush
         , "Float", x, "Float", y, "Float", w, "Float", h, "UInt")
+}
+
+Gdip_CreateFont(fontFamily, fontSize, fontStyle) {
+    font := 0
+    if (DllCall("gdiplus\GdipCreateFont", "Ptr", fontFamily, "Float", fontSize, "Int", fontStyle, "Int", 2, "Ptr*", &font, "UInt"))
+        return 0
+    return font
+}
+
+Gdip_CreateFontFamily(name) {
+    fontFamily := 0
+    if (DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", name, "Ptr", 0, "Ptr*", &fontFamily, "UInt"))
+        return 0
+    return fontFamily
+}
+
+Gdip_DeleteFont(font) {
+    if (font)
+        DllCall("gdiplus\GdipDeleteFont", "Ptr", font)
+}
+
+Gdip_DeleteFontFamily(fontFamily) {
+    if (fontFamily)
+        DllCall("gdiplus\GdipDeleteFontFamily", "Ptr", fontFamily)
+}
+
+Gdip_CreateStringFormat(formatFlags, language) {
+    format := 0
+    if (DllCall("gdiplus\GdipCreateStringFormat", "Int", formatFlags, "UShort", language, "Ptr*", &format, "UInt"))
+        return 0
+    return format
+}
+
+Gdip_DeleteStringFormat(format) {
+    if (format)
+        DllCall("gdiplus\GdipDeleteStringFormat", "Ptr", format)
+}
+
+Gdip_SetStringFormatAlign(format, align) {
+    return DllCall("gdiplus\GdipSetStringFormatAlign", "Ptr", format, "Int", align, "UInt")
+}
+
+Gdip_SetStringFormatLineAlign(format, align) {
+    return DllCall("gdiplus\GdipSetStringFormatLineAlign", "Ptr", format, "Int", align, "UInt")
+}
+
+Gdip_DrawString(graphics, text, font, brush, x, y, w, h, format) {
+    rectF := Buffer(16, 0)
+    NumPut("Float", x, rectF, 0)
+    NumPut("Float", y, rectF, 4)
+    NumPut("Float", w, rectF, 8)
+    NumPut("Float", h, rectF, 12)
+    return DllCall("gdiplus\GdipDrawString", "Ptr", graphics, "WStr", text, "Int", -1
+        , "Ptr", font, "Ptr", rectF, "Ptr", format, "Ptr", brush, "UInt")
 }
 
 CreateDIBSection(width, height) {
@@ -177,6 +248,9 @@ InitGdip()
 global currentMainAddress := ""
 global excludedAddressesList := []
 
+; Wheel menu captured address (stores address at menu open time)
+global WheelMenuCapturedAddress := ""
+
 ; ============================================================================
 ; MAIN HOTKEY: F14 (mapped from your mouse button in G HUB)
 ; ============================================================================
@@ -190,7 +264,7 @@ F14::HandleSolscanLookup()
 ; WHEEL MENU HOTKEY: F13 (mapped from your mouse button in G HUB)
 ; ============================================================================
 ; Opens radial wheel menu with all available actions
-; Click the button you mapped to F13 to open menu
+; Hover over an address, press F13 to open the menu
 ; Select action by: moving mouse toward it, or pressing number key (1-6)
 ; ============================================================================
 
@@ -803,110 +877,401 @@ ShowNotification(title, message) {
 ; Beautiful Blender-style radial pie menu using GDI+ for native rendering
 ;
 ; INTERACTION METHODS:
-; - Keyboard: Press 1-5 to select action, Esc/6 to cancel (PRIMARY METHOD)
-; - Mouse: Click pie slices directly
+; - Mouse: Hover over slices to highlight, click to select
+; - Keyboard: Press 1-6 to select action directly, Esc to cancel
 ;
-; NOTE: Keyboard shortcuts via AutoHotkey (#HotIf) are the primary interaction
+; FEATURES:
+; - Real-time mouse tracking with smooth hover detection
+; - Dynamic highlighting of hovered slice
+; - Separated ring-style slices with gaps (Blender-style)
+; - Center selection ring indicator
 ; ============================================================================
 
 global WheelMenuActive := false
 global WheelMenuGui := ""
+global WheelMenuHwnd := 0
+global WheelMenuHdc := 0
+global WheelMenuHbm := 0
+global WheelMenuGraphics := 0
+global WheelMenuCenterX := 0
+global WheelMenuCenterY := 0
+global WheelMenuOriginX := 0
+global WheelMenuOriginY := 0
+global WheelMenuSize := 300
+global WheelMenuLastHovered := 0
 
 ShowWheelMenu() {
-    global WheelMenuActive, WheelMenuGui
+    global WheelMenuActive, WheelMenuGui, WheelMenuHwnd, WheelMenuHdc, WheelMenuHbm
+    global WheelMenuGraphics, WheelMenuCenterX, WheelMenuCenterY
+    global WheelMenuOriginX, WheelMenuOriginY, WheelMenuSize, WheelMenuLastHovered
+    global WheelMenuCapturedAddress
 
     if (WheelMenuActive) {
         CloseWheelMenu()
         return
     }
 
+    ; CRITICAL: Capture address BEFORE opening menu (before mouse moves away)
+    ; Save clipboard
+    ClipSaved := ClipboardAll()
+    A_Clipboard := ""
+
+    ; Capture text under cursor
+    capturedText := CaptureTextUnderCursor()
+
+    ; Restore clipboard
+    A_Clipboard := ClipSaved
+    ClipSaved := ""
+
+    ; Extract and validate address
+    WheelMenuCapturedAddress := ""
+    if (capturedText != "") {
+        address := ExtractAddressFromText(capturedText)
+        if (address == "" && IsValidSolanaAddress(capturedText)) {
+            address := capturedText
+        }
+        if (address != "" && IsValidSolanaAddress(address)) {
+            WheelMenuCapturedAddress := address
+        }
+    }
+
+    ; Get mouse position for menu placement
+    MouseGetPos &mx, &my
+    WheelMenuOriginX := mx
+    WheelMenuOriginY := my
+
+    WheelMenuCenterX := WheelMenuSize // 2
+    WheelMenuCenterY := WheelMenuSize // 2
+
+    ; Create layered GUI window
+    ; Note: Removed +E0x20 (WS_EX_TRANSPARENT) so window can receive mouse clicks
+    WheelMenuGui := Gui("-Caption +E0x80000 +AlwaysOnTop +ToolWindow")
+    WheelMenuGui.Show("x" . (mx - WheelMenuCenterX) . " y" . (my - WheelMenuCenterY)
+        . " w" . WheelMenuSize . " h" . WheelMenuSize . " NoActivate")
+    WheelMenuHwnd := WheelMenuGui.Hwnd
+
+    ; Create persistent GDI+ objects
+    WheelMenuHbm := CreateDIBSection(WheelMenuSize, WheelMenuSize)
+    if (!WheelMenuHbm) {
+        CloseWheelMenu()
+        return
+    }
+
+    WheelMenuHdc := CreateCompatibleDC()
+    if (!WheelMenuHdc) {
+        CloseWheelMenu()
+        return
+    }
+
+    SelectObject(WheelMenuHdc, WheelMenuHbm)
+    WheelMenuGraphics := Gdip_GraphicsFromHDC(WheelMenuHdc)
+    if (!WheelMenuGraphics) {
+        CloseWheelMenu()
+        return
+    }
+
+    Gdip_SetSmoothingMode(WheelMenuGraphics, 4)
+
+    ; Initial draw
+    WheelMenuLastHovered := 0
+    RedrawWheelMenu(0)
+
+    WheelMenuActive := true
+
+    ; Start mouse tracking timer (60 FPS)
+    SetTimer UpdateWheelMenuHover, 16
+
+    ; Set up click handler
+    OnMessage(0x201, WheelMenuClickHandler)
+}
+
+UpdateWheelMenuHover() {
+    global WheelMenuActive, WheelMenuOriginX, WheelMenuOriginY
+    global WheelMenuLastHovered
+
+    if (!WheelMenuActive) {
+        SetTimer UpdateWheelMenuHover, 0
+        return
+    }
+
+    ; Get mouse position
     MouseGetPos &mx, &my
 
-    size := 300
-    centerX := size // 2
-    centerY := size // 2
+    ; Calculate relative position to menu center
+    relX := mx - WheelMenuOriginX
+    relY := my - WheelMenuOriginY
+
+    ; Calculate distance from center
+    dist := Sqrt(relX * relX + relY * relY)
+
+    ; Determine hovered slice
+    hoveredSlice := 0
+
+    ; Only detect hover if mouse is in the ring area (between inner and outer radius)
+    if (dist >= 50 && dist <= 130) {
+        ; Calculate angle (in degrees, 0 = right, 90 = down, 180 = left, 270 = up)
+        ; Use ATan for y/x ratio, then adjust based on quadrant
+        if (relX == 0) {
+            angleRad := (relY > 0) ? 1.5707963267948966 : -1.5707963267948966  ; 90° or -90°
+        } else {
+            angleRad := ATan(relY / relX)
+            ; Adjust for quadrant
+            if (relX < 0) {
+                angleRad += 3.14159265359  ; Add 180° for left half
+            } else if (relY < 0) {
+                angleRad += 6.28318530718  ; Add 360° for negative angles
+            }
+        }
+        angleDeg := angleRad * 180 / 3.14159265359
+
+        ; Normalize to 0-360
+        if (angleDeg < 0) {
+            angleDeg += 360
+        }
+
+        ; Adjust for our slice layout (first slice starts at top = -90°)
+        ; Add 90 to make 0° point up instead of right
+        angleDeg := Mod(angleDeg + 90, 360)
+
+        ; Determine which slice (1-6)
+        ; Each slice is 60° (with 5° gaps we'll add later)
+        hoveredSlice := Floor(angleDeg / 60) + 1
+        if (hoveredSlice > 6) {
+            hoveredSlice := 1
+        }
+    }
+
+    ; Redraw if hovered slice changed
+    if (hoveredSlice != WheelMenuLastHovered) {
+        WheelMenuLastHovered := hoveredSlice
+        RedrawWheelMenu(hoveredSlice)
+    }
+}
+
+RedrawWheelMenu(hoveredSlice) {
+    global WheelMenuGraphics, WheelMenuHdc, WheelMenuHwnd
+    global WheelMenuCenterX, WheelMenuCenterY, WheelMenuOriginX, WheelMenuOriginY
+    global WheelMenuSize
+
+    if (!WheelMenuGraphics) {
+        return
+    }
+
+    centerX := WheelMenuCenterX
+    centerY := WheelMenuCenterY
     radius := 130
     innerRadius := 50
 
-    WheelMenuGui := Gui("-Caption +E0x80000 +E0x20 +AlwaysOnTop +ToolWindow")
-    WheelMenuGui.Show("x" . (mx - centerX) . " y" . (my - centerY) . " w" . size . " h" . size . " NoActivate")
-    hwnd := WheelMenuGui.Hwnd
+    ; Clear canvas
+    Gdip_GraphicsClear(WheelMenuGraphics, 0x00000000)
 
-    hbm := CreateDIBSection(size, size)
-    if (!hbm) {
-        WheelMenuGui.Destroy()
-        WheelMenuGui := ""
-        return
-    }
+    ; Base colors for each slice
+    baseColors := [0xAA4A90E2, 0xAAE74C3C, 0xAA9B59B6, 0xAA2ECC71, 0xAAF39C12, 0xAA95A5A6]
 
-    hdc := CreateCompatibleDC()
-    if (!hdc) {
-        DeleteObject(hbm)
-        WheelMenuGui.Destroy()
-        WheelMenuGui := ""
-        return
-    }
+    ; Draw 6 ring slices with gaps (Blender-style)
+    Loop 6 {
+        sliceIndex := A_Index
+        startAngle := (sliceIndex - 1) * 60 - 90
+        sweepAngle := 55  ; 55° slice + 5° gap = 60° total
 
-    hOldBitmap := SelectObject(hdc, hbm)
-    pGraphics := Gdip_GraphicsFromHDC(hdc)
-    if (!pGraphics) {
-        SelectObject(hdc, hOldBitmap)
-        DeleteDC(hdc)
-        DeleteObject(hbm)
-        WheelMenuGui.Destroy()
-        WheelMenuGui := ""
-        return
-    }
+        ; Determine color (brighten if hovered)
+        color := baseColors[sliceIndex]
+        if (sliceIndex == hoveredSlice) {
+            ; Brighten by increasing opacity and RGB values
+            color := 0xFF4A90E2
+            if (sliceIndex == 1) {
+                color := 0xFF5AA5FF
+            } else if (sliceIndex == 2) {
+                color := 0xFFFF6B5B
+            } else if (sliceIndex == 3) {
+                color := 0xFFB76FC8
+            } else if (sliceIndex == 4) {
+                color := 0xFF4AE88A
+            } else if (sliceIndex == 5) {
+                color := 0xFFFFC133
+            } else if (sliceIndex == 6) {
+                color := 0xFFB0BFC5
+            }
+        }
 
-    Gdip_SetSmoothingMode(pGraphics, 4)
-    Gdip_GraphicsClear(pGraphics, 0x00000000)
-
-    colors := [0xAA4A90E2, 0xAAE74C3C, 0xAA9B59B6, 0xAA2ECC71, 0xAAF39C12, 0xAA95A5A6]
-    Loop colors.Length {
-        startAngle := (A_Index - 1) * 60 - 90
-        pBrush := Gdip_BrushCreateSolid(colors[A_Index])
+        ; Draw slice
+        pBrush := Gdip_BrushCreateSolid(color)
         if (pBrush) {
-            Gdip_FillPie(pGraphics, pBrush, centerX - radius, centerY - radius, radius * 2, radius * 2, startAngle, 60)
+            Gdip_FillPie(WheelMenuGraphics, pBrush, centerX - radius, centerY - radius
+                , radius * 2, radius * 2, startAngle, sweepAngle)
             Gdip_DeleteBrush(pBrush)
         }
     }
 
+    ; Draw center circle
     pBrushCenter := Gdip_BrushCreateSolid(0xFF1E1E1E)
     if (pBrushCenter) {
-        Gdip_FillEllipse(pGraphics, pBrushCenter, centerX - innerRadius, centerY - innerRadius, innerRadius * 2, innerRadius * 2)
+        Gdip_FillEllipse(WheelMenuGraphics, pBrushCenter
+            , centerX - innerRadius, centerY - innerRadius
+            , innerRadius * 2, innerRadius * 2)
         Gdip_DeleteBrush(pBrushCenter)
     }
 
-    UpdateLayeredWindow(hwnd, hdc, mx - centerX, my - centerY, size, size)
+    ; Draw selection indicator ring in center (if hovering)
+    if (hoveredSlice > 0) {
+        indicatorAngle := (hoveredSlice - 1) * 60 - 90 + 27.5  ; Point to center of slice
+        indicatorRad := indicatorAngle * 3.14159265359 / 180
 
-    Gdip_DeleteGraphics(pGraphics)
-    SelectObject(hdc, hOldBitmap)
-    DeleteDC(hdc)
-    DeleteObject(hbm)
+        ; Draw small arc/wedge pointing to selected slice
+        indicatorColor := 0xFFFFFFFF
+        pBrushIndicator := Gdip_BrushCreateSolid(indicatorColor)
+        if (pBrushIndicator) {
+            ; Draw small wedge in center
+            Gdip_FillPie(WheelMenuGraphics, pBrushIndicator
+                , centerX - 25, centerY - 25, 50, 50
+                , indicatorAngle - 15, 30)
+            Gdip_DeleteBrush(pBrushIndicator)
+        }
+    }
 
-    WheelMenuActive := true
+    ; Draw text labels
+    labels := ["Solscan", "Exclude", "Monitor", "Defined.fi", "Analyze", "Cancel"]
+
+    fontFamily := Gdip_CreateFontFamily("Segoe UI")
+    if (fontFamily) {
+        font := Gdip_CreateFont(fontFamily, 11, 1)
+        fontNumber := Gdip_CreateFont(fontFamily, 14, 1)
+
+        if (font && fontNumber) {
+            pTextBrush := Gdip_BrushCreateSolid(0xFFFFFFFF)
+            if (pTextBrush) {
+                format := Gdip_CreateStringFormat(0, 0)
+                if (format) {
+                    Gdip_SetStringFormatAlign(format, 1)
+                    Gdip_SetStringFormatLineAlign(format, 1)
+
+                    textRadius := 90
+                    numberRadius := 110
+
+                    Loop labels.Length {
+                        angle := (A_Index - 1) * 60 - 90 + 30
+                        angleRad := angle * 3.14159265359 / 180
+
+                        textX := centerX + (textRadius * Cos(angleRad))
+                        textY := centerY + (textRadius * Sin(angleRad))
+
+                        Gdip_DrawString(WheelMenuGraphics, labels[A_Index], font, pTextBrush
+                            , textX - 40, textY - 15, 80, 30, format)
+
+                        numX := centerX + (numberRadius * Cos(angleRad))
+                        numY := centerY + (numberRadius * Sin(angleRad))
+
+                        Gdip_DrawString(WheelMenuGraphics, A_Index, fontNumber, pTextBrush
+                            , numX - 15, numY - 15, 30, 30, format)
+                    }
+
+                    Gdip_DeleteStringFormat(format)
+                }
+                Gdip_DeleteBrush(pTextBrush)
+            }
+            if (font)
+                Gdip_DeleteFont(font)
+            if (fontNumber)
+                Gdip_DeleteFont(fontNumber)
+        }
+        Gdip_DeleteFontFamily(fontFamily)
+    }
+
+    ; Update the layered window
+    UpdateLayeredWindow(WheelMenuHwnd, WheelMenuHdc
+        , WheelMenuOriginX - centerX, WheelMenuOriginY - centerY
+        , WheelMenuSize, WheelMenuSize)
+}
+
+HandleMenuClick(*) {
+    global WheelMenuLastHovered
+
+    ; Execute action for currently hovered slice
+    if (WheelMenuLastHovered > 0) {
+        SelectWheelAction(WheelMenuLastHovered)
+    } else {
+        ; Click outside ring area (center or outside) - close menu
+        CloseWheelMenu()
+    }
+}
+
+WheelMenuClickHandler(wParam, lParam, msg, hwnd) {
+    global WheelMenuActive, WheelMenuHwnd, WheelMenuLastHovered
+
+    ; Check if click is on our menu window
+    if (!WheelMenuActive || hwnd != WheelMenuHwnd) {
+        return
+    }
+
+    ; Execute action for currently hovered slice
+    if (WheelMenuLastHovered > 0) {
+        SelectWheelAction(WheelMenuLastHovered)
+    } else {
+        ; Click outside ring area - close menu
+        CloseWheelMenu()
+    }
+
+    return
 }
 
 SelectWheelAction(actionId) {
+    global WheelMenuCapturedAddress
+
     ; Close menu first
     CloseWheelMenu()
 
     ; Small delay
     Sleep 50
 
-    ; Execute action
+    ; Check if we have a captured address
+    if (WheelMenuCapturedAddress == "") {
+        ShowNotification("No address captured", "Hover over an address before opening menu")
+        return
+    }
+
+    ; Execute action using pre-captured address
     switch actionId {
-        case 1: HandleSolscanLookup()
-        case 2: HandleSolscanLookupWithExclude()
-        case 3: HandleTelegramRegister()
-        case 4: HandleDefinedFiLookup()
-        case 5: HandleTokenAnalysis()
-        case 6: return  ; Cancel - just close
+        case 1:  ; Solscan
+            global currentMainAddress := WheelMenuCapturedAddress
+            global excludedAddressesList := []
+            OpenSolscan(WheelMenuCapturedAddress)
+            ShowNotification("Opening Solscan...", WheelMenuCapturedAddress)
+        case 2:  ; Exclude
+            ; Get current URL data for exclusion
+            urlData := GetAddressAndExclusionsFromURL()
+            if (urlData.address != "") {
+                ; Add captured address to exclusion list
+                alreadyExcluded := false
+                for index, addr in urlData.exclusions {
+                    if (addr == WheelMenuCapturedAddress) {
+                        alreadyExcluded := true
+                        break
+                    }
+                }
+                if (!alreadyExcluded) {
+                    urlData.exclusions.Push(WheelMenuCapturedAddress)
+                }
+                ReloadPageWithExclusions(urlData.address, urlData.exclusions)
+                ShowNotification("Excluded address added", WheelMenuCapturedAddress)
+            } else {
+                ShowNotification("No Solscan page detected", "Open a Solscan address page first")
+            }
+        case 3:  ; Monitor
+            RegisterAddressWithMonitor(WheelMenuCapturedAddress)
+        case 4:  ; Defined.fi
+            url := "https://defined.fi/#autosearch=" . WheelMenuCapturedAddress
+            Run url
+            ShowNotification("Opening defined.fi", WheelMenuCapturedAddress)
+        case 5:  ; Analyze
+            AnalyzeTokenWithService(WheelMenuCapturedAddress)
+        case 6:  ; Cancel
+            return
     }
 }
 
 CloseWheelMenu() {
-    global WheelMenuActive, WheelMenuGui
+    global WheelMenuActive, WheelMenuGui, WheelMenuGraphics, WheelMenuHdc, WheelMenuHbm
+    global WheelMenuLastHovered
 
     if (!WheelMenuActive) {
         if (WheelMenuGui) {
@@ -916,8 +1281,32 @@ CloseWheelMenu() {
         return
     }
 
-    WheelMenuActive := false
+    ; Stop timer first
+    SetTimer UpdateWheelMenuHover, 0
 
+    ; Remove click handler
+    OnMessage(0x201, WheelMenuClickHandler, 0)
+
+    WheelMenuActive := false
+    WheelMenuLastHovered := 0
+
+    ; Clean up GDI+ resources
+    if (WheelMenuGraphics) {
+        Gdip_DeleteGraphics(WheelMenuGraphics)
+        WheelMenuGraphics := 0
+    }
+
+    if (WheelMenuHdc) {
+        DeleteDC(WheelMenuHdc)
+        WheelMenuHdc := 0
+    }
+
+    if (WheelMenuHbm) {
+        DeleteObject(WheelMenuHbm)
+        WheelMenuHbm := 0
+    }
+
+    ; Destroy GUI
     if (WheelMenuGui) {
         try WheelMenuGui.Destroy()
         WheelMenuGui := ""
