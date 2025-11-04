@@ -103,10 +103,84 @@
 
                     console.log('[Defined.fi Auto-Search] Search completed');
                 }, 500); // Give React time to process the input
+
+                // After search completes, wait for token page to load, then set USD filter
+                setTimeout(() => {
+                    applyUsdFilter();
+                }, 4000); // Wait 4 seconds for token page to fully load (500ms + 3500ms)
             } else {
                 console.log('[Defined.fi Auto-Search] Search input not found');
             }
         }, 400); // Wait 400ms for modal to open after Ctrl+K
+    }
+
+    function applyUsdFilter(attempt) {
+        if (typeof attempt === 'undefined') {
+            attempt = 1;
+        }
+        const maxAttempts = 5;
+        console.log('[Defined.fi Auto-Search] Attempting to set USD filter (attempt ' + attempt + '/' + maxAttempts + ')...');
+
+        // First, try to find and click the USD filter toggle button
+        const usdFilterButton = document.querySelector('button[data-sentry-component="FilterButtonWithToggle"] p.MuiTypography-root');
+
+        if (usdFilterButton && usdFilterButton.textContent === 'USD') {
+            const button = usdFilterButton.closest('button');
+            if (button) {
+                console.log('[Defined.fi Auto-Search] Found USD filter button, clicking to open...');
+                button.click();
+
+                // Wait for filter panel to open, then set the value
+                setTimeout(() => {
+                    setUsdFilterValue(attempt);
+                }, 500); // Wait 500ms for panel to expand
+                return;
+            }
+        }
+
+        // If button not found, try to find the input directly (maybe it's already open)
+        setUsdFilterValue(attempt);
+    }
+
+    function setUsdFilterValue(attempt) {
+        const maxAttempts = 5;
+
+        // Find the Min USD input field
+        const usdInput = document.getElementById('minPriceUsdTotal');
+
+        if (!usdInput) {
+            if (attempt < maxAttempts) {
+                console.log('[Defined.fi Auto-Search] USD filter input not found, retrying in 1 second...');
+                setTimeout(() => applyUsdFilter(attempt + 1), 1000);
+            } else {
+                console.log('[Defined.fi Auto-Search] USD filter input not found after 5 attempts - giving up');
+            }
+            return;
+        }
+
+        console.log('[Defined.fi Auto-Search] Found USD filter input');
+
+        // Set the value using React-friendly method
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(usdInput, '50');
+
+        // Trigger events to enable the Apply button
+        usdInput.dispatchEvent(new Event('input', { bubbles: true }));
+        usdInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        console.log('[Defined.fi Auto-Search] Set USD filter to $50');
+
+        // Wait for React to update, then click Apply button
+        setTimeout(() => {
+            const applyButton = document.querySelector('button[type="submit"]:not([disabled])');
+
+            if (applyButton) {
+                applyButton.click();
+                console.log('[Defined.fi Auto-Search] Clicked Apply button - filter active!');
+            } else {
+                console.log('[Defined.fi Auto-Search] Apply button not found or still disabled');
+            }
+        }, 500); // Wait 500ms for button to enable
     }
 
     // Wait for page to be ready, then try once
