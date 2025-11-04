@@ -77,8 +77,27 @@ Gdip_SetSmoothingMode(graphics, mode) {
     return DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", graphics, "Int", mode, "UInt")
 }
 
+Gdip_SetCompositingMode(graphics, mode) {
+    return DllCall("gdiplus\GdipSetCompositingMode", "Ptr", graphics, "Int", mode, "UInt")
+}
+
 Gdip_GraphicsClear(graphics, argb) {
     return DllCall("gdiplus\GdipGraphicsClear", "Ptr", graphics, "UInt", argb, "UInt")
+}
+
+Gdip_CreatePen(argb, width) {
+    pen := 0
+    DllCall("gdiplus\GdipCreatePen1", "UInt", argb, "Float", width, "Int", 2, "Ptr*", &pen, "UInt")
+    return pen
+}
+
+Gdip_DeletePen(pen) {
+    if (pen)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+}
+
+Gdip_DrawPath(graphics, pen, path) {
+    return DllCall("gdiplus\GdipDrawPath", "Ptr", graphics, "Ptr", pen, "Ptr", path, "UInt")
 }
 
 Gdip_BrushCreateSolid(argb) {
@@ -102,6 +121,35 @@ Gdip_FillPie(graphics, brush, x, y, w, h, startAngle, sweepAngle) {
 Gdip_FillEllipse(graphics, brush, x, y, w, h) {
     return DllCall("gdiplus\GdipFillEllipse", "Ptr", graphics, "Ptr", brush
         , "Float", x, "Float", y, "Float", w, "Float", h, "UInt")
+}
+
+Gdip_FillRectangle(graphics, brush, x, y, w, h) {
+    return DllCall("gdiplus\GdipFillRectangle", "Ptr", graphics, "Ptr", brush
+        , "Float", x, "Float", y, "Float", w, "Float", h, "UInt")
+}
+
+Gdip_CreatePath() {
+    path := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", &path, "UInt")
+    return path
+}
+
+Gdip_DeletePath(path) {
+    if (path)
+        DllCall("gdiplus\GdipDeletePath", "Ptr", path)
+}
+
+Gdip_AddPathRoundedRectangle(path, x, y, w, h, radius) {
+    ; Create a rounded rectangle path
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", path, "Float", x, "Float", y, "Float", radius*2, "Float", radius*2, "Float", 180, "Float", 90, "UInt")
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", path, "Float", x+w-radius*2, "Float", y, "Float", radius*2, "Float", radius*2, "Float", 270, "Float", 90, "UInt")
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", path, "Float", x+w-radius*2, "Float", y+h-radius*2, "Float", radius*2, "Float", radius*2, "Float", 0, "Float", 90, "UInt")
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", path, "Float", x, "Float", y+h-radius*2, "Float", radius*2, "Float", radius*2, "Float", 90, "Float", 90, "UInt")
+    DllCall("gdiplus\GdipClosePathFigure", "Ptr", path, "UInt")
+}
+
+Gdip_FillPath(graphics, brush, path) {
+    return DllCall("gdiplus\GdipFillPath", "Ptr", graphics, "Ptr", brush, "Ptr", path, "UInt")
 }
 
 Gdip_CreateFont(fontFamily, fontSize, fontStyle) {
@@ -1059,16 +1107,16 @@ RedrawWheelMenu(hoveredSlice) {
 
     centerX := WheelMenuCenterX
     centerY := WheelMenuCenterY
-    radius := 130
-    innerRadius := 50
+    outerRadius := 25      ; Smaller ring outer edge
+    innerRadius := 18      ; Smaller ring inner edge
 
     ; Clear canvas
     Gdip_GraphicsClear(WheelMenuGraphics, 0x00000000)
 
-    ; Base colors for each slice
-    baseColors := [0xAA4A90E2, 0xAAE74C3C, 0xAA9B59B6, 0xAA2ECC71, 0xAAF39C12, 0xAA95A5A6]
+    ; Base colors for each slice (more muted)
+    baseColors := [0x804A90E2, 0x80E74C3C, 0x809B59B6, 0x802ECC71, 0x80F39C12, 0x8095A5A6]
 
-    ; Draw 6 ring slices with gaps (Blender-style)
+    ; Draw 6 thin ring segments with gaps
     Loop 6 {
         sliceIndex := A_Index
         startAngle := (sliceIndex - 1) * 60 - 90
@@ -1077,8 +1125,7 @@ RedrawWheelMenu(hoveredSlice) {
         ; Determine color (brighten if hovered)
         color := baseColors[sliceIndex]
         if (sliceIndex == hoveredSlice) {
-            ; Brighten by increasing opacity and RGB values
-            color := 0xFF4A90E2
+            ; Full opacity when hovered
             if (sliceIndex == 1) {
                 color := 0xFF5AA5FF
             } else if (sliceIndex == 2) {
@@ -1094,80 +1141,116 @@ RedrawWheelMenu(hoveredSlice) {
             }
         }
 
-        ; Draw slice
+        ; Draw outer ring segment
         pBrush := Gdip_BrushCreateSolid(color)
         if (pBrush) {
-            Gdip_FillPie(WheelMenuGraphics, pBrush, centerX - radius, centerY - radius
-                , radius * 2, radius * 2, startAngle, sweepAngle)
+            Gdip_FillPie(WheelMenuGraphics, pBrush
+                , centerX - outerRadius, centerY - outerRadius
+                , outerRadius * 2, outerRadius * 2, startAngle, sweepAngle)
             Gdip_DeleteBrush(pBrush)
         }
     }
 
-    ; Draw center circle
-    pBrushCenter := Gdip_BrushCreateSolid(0xFF1E1E1E)
-    if (pBrushCenter) {
-        Gdip_FillEllipse(WheelMenuGraphics, pBrushCenter
+    ; Cut out inner circle to make it a hollow ring
+    ; Use compositing mode SourceCopy (1) to actually erase to transparency
+    Gdip_SetCompositingMode(WheelMenuGraphics, 1)
+    pBrushClear := Gdip_BrushCreateSolid(0x00000000)
+    if (pBrushClear) {
+        Gdip_FillEllipse(WheelMenuGraphics, pBrushClear
             , centerX - innerRadius, centerY - innerRadius
             , innerRadius * 2, innerRadius * 2)
-        Gdip_DeleteBrush(pBrushCenter)
+        Gdip_DeleteBrush(pBrushClear)
     }
+    ; Restore compositing mode to SourceOver (0) for normal drawing
+    Gdip_SetCompositingMode(WheelMenuGraphics, 0)
 
-    ; Draw selection indicator ring in center (if hovering)
-    if (hoveredSlice > 0) {
-        indicatorAngle := (hoveredSlice - 1) * 60 - 90 + 27.5  ; Point to center of slice
-        indicatorRad := indicatorAngle * 3.14159265359 / 180
-
-        ; Draw small arc/wedge pointing to selected slice
-        indicatorColor := 0xFFFFFFFF
-        pBrushIndicator := Gdip_BrushCreateSolid(indicatorColor)
-        if (pBrushIndicator) {
-            ; Draw small wedge in center
-            Gdip_FillPie(WheelMenuGraphics, pBrushIndicator
-                , centerX - 25, centerY - 25, 50, 50
-                , indicatorAngle - 15, 30)
-            Gdip_DeleteBrush(pBrushIndicator)
-        }
-    }
-
-    ; Draw text labels
+    ; Draw text labels as floating boxes outside the ring
     labels := ["Solscan", "Exclude", "Monitor", "Defined.fi", "Analyze", "Cancel"]
 
-    fontFamily := Gdip_CreateFontFamily("Segoe UI")
+    fontFamily := Gdip_CreateFontFamily("Inter")
+    if (!fontFamily) {
+        ; Fallback to Segoe UI if Inter not installed
+        fontFamily := Gdip_CreateFontFamily("Segoe UI")
+    }
+
     if (fontFamily) {
-        font := Gdip_CreateFont(fontFamily, 11, 1)
-        fontNumber := Gdip_CreateFont(fontFamily, 14, 1)
+        font := Gdip_CreateFont(fontFamily, 12, 1)  ; Slightly larger font
+        fontNumber := Gdip_CreateFont(fontFamily, 10, 0)  ; Smaller number, not bold
 
         if (font && fontNumber) {
-            pTextBrush := Gdip_BrushCreateSolid(0xFFFFFFFF)
-            if (pTextBrush) {
-                format := Gdip_CreateStringFormat(0, 0)
-                if (format) {
-                    Gdip_SetStringFormatAlign(format, 1)
-                    Gdip_SetStringFormatLineAlign(format, 1)
+            format := Gdip_CreateStringFormat(0, 0)
+            if (format) {
+                Gdip_SetStringFormatAlign(format, 1)      ; Center horizontally
+                Gdip_SetStringFormatLineAlign(format, 1)  ; Center vertically
 
-                    textRadius := 90
-                    numberRadius := 110
+                textDistance := 110  ; Distance from center for text boxes
 
-                    Loop labels.Length {
-                        angle := (A_Index - 1) * 60 - 90 + 30
-                        angleRad := angle * 3.14159265359 / 180
+                Loop labels.Length {
+                    sliceIndex := A_Index
+                    angle := (sliceIndex - 1) * 60 - 90 + 30  ; Center of slice
+                    angleRad := angle * 3.14159265359 / 180
 
-                        textX := centerX + (textRadius * Cos(angleRad))
-                        textY := centerY + (textRadius * Sin(angleRad))
+                    ; Calculate position for text box
+                    textX := centerX + (textDistance * Cos(angleRad))
+                    textY := centerY + (textDistance * Sin(angleRad))
 
-                        Gdip_DrawString(WheelMenuGraphics, labels[A_Index], font, pTextBrush
-                            , textX - 40, textY - 15, 80, 30, format)
-
-                        numX := centerX + (numberRadius * Cos(angleRad))
-                        numY := centerY + (numberRadius * Sin(angleRad))
-
-                        Gdip_DrawString(WheelMenuGraphics, A_Index, fontNumber, pTextBrush
-                            , numX - 15, numY - 15, 30, 30, format)
+                    ; Determine text colors
+                    if (sliceIndex == hoveredSlice) {
+                        textColor := 0xFFFFFFFF      ; White when hovered
+                        bgColor := 0xC0000000        ; Dark semi-transparent background
+                        numberColor := 0xFFCCCCCC    ; Light gray number
+                    } else {
+                        textColor := 0xFFCCCCCC      ; Light gray normally
+                        bgColor := 0x90000000        ; Very dark semi-transparent
+                        numberColor := 0xFF888888    ; Gray number
                     }
 
-                    Gdip_DeleteStringFormat(format)
+                    ; Draw rounded rectangle background for label
+                    boxW := 80
+                    boxH := 35
+                    cornerRadius := 6  ; Slight rounding
+
+                    pBrushBg := Gdip_BrushCreateSolid(bgColor)
+                    if (pBrushBg) {
+                        ; Create rounded rectangle path
+                        path := Gdip_CreatePath()
+                        if (path) {
+                            Gdip_AddPathRoundedRectangle(path, textX - boxW/2, textY - boxH/2, boxW, boxH, cornerRadius)
+                            Gdip_FillPath(WheelMenuGraphics, pBrushBg, path)
+
+                            ; Add bright border when hovered
+                            if (sliceIndex == hoveredSlice) {
+                                borderColor := 0xFFFFFFFF  ; Bright white border
+                                pPen := Gdip_CreatePen(borderColor, 2)
+                                if (pPen) {
+                                    Gdip_DrawPath(WheelMenuGraphics, pPen, path)
+                                    Gdip_DeletePen(pPen)
+                                }
+                            }
+
+                            Gdip_DeletePath(path)
+                        }
+                        Gdip_DeleteBrush(pBrushBg)
+                    }
+
+                    ; Draw label text
+                    pTextBrush := Gdip_BrushCreateSolid(textColor)
+                    if (pTextBrush) {
+                        Gdip_DrawString(WheelMenuGraphics, labels[sliceIndex], font, pTextBrush
+                            , textX - boxW/2, textY - boxH/2 + 3, boxW, boxH - 13, format)
+                        Gdip_DeleteBrush(pTextBrush)
+                    }
+
+                    ; Draw number below label
+                    pNumberBrush := Gdip_BrushCreateSolid(numberColor)
+                    if (pNumberBrush) {
+                        Gdip_DrawString(WheelMenuGraphics, sliceIndex, fontNumber, pNumberBrush
+                            , textX - 15, textY + 8, 30, 15, format)
+                        Gdip_DeleteBrush(pNumberBrush)
+                    }
                 }
-                Gdip_DeleteBrush(pTextBrush)
+
+                Gdip_DeleteStringFormat(format)
             }
             if (font)
                 Gdip_DeleteFont(font)
