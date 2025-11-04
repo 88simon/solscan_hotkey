@@ -670,7 +670,7 @@ global WheelMenuGui := ""
 global WheelMenuWebView := ""
 
 ShowWheelMenu() {
-    global WheelMenuActive, WheelMenuGui, WheelMenuWebView
+    global WheelMenuActive, WheelMenuGui
 
     ; If menu is already active, close it
     if (WheelMenuActive) {
@@ -678,8 +678,7 @@ ShowWheelMenu() {
         return
     }
 
-    ; Just use the simple menu that actually works
-    ; The HTML pie menu doesn't work properly with AutoHotkey's ActiveX limitations
+    ; Get mouse position and show menu
     MouseGetPos &mx, &my
     ShowSimpleMenu(mx, my)
 }
