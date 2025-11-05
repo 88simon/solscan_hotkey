@@ -463,7 +463,7 @@ HandleSolscanLookupWithExclude() {
 CaptureTextUnderCursor() {
     ; Strategy 1: Check if text is already selected
     Send "^c"
-    if ClipWait(0.2) {
+    if ClipWait(0.15) {
         if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
             return Trim(A_Clipboard)
         }
@@ -471,13 +471,13 @@ CaptureTextUnderCursor() {
 
     ; Strategy 2: Double-click to select word under cursor
     Click
-    Sleep 50
+    Sleep 20
     Click
-    Sleep SELECTION_DELAY
+    Sleep 50
 
     ; Copy selected text
     Send "^c"
-    if ClipWait(0.3) {
+    if ClipWait(0.2) {
         if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
             captured := Trim(A_Clipboard)
             return captured
@@ -487,9 +487,9 @@ CaptureTextUnderCursor() {
     ; Strategy 3: Select entire line (fallback)
     Send "{Home}"
     Send "+{End}"
-    Sleep SELECTION_DELAY
+    Sleep 50
     Send "^c"
-    if ClipWait(0.3) {
+    if ClipWait(0.2) {
         if (A_Clipboard != "" && StrLen(A_Clipboard) > 0) {
             return A_Clipboard
         }
@@ -986,6 +986,10 @@ ShowWheelMenu() {
         }
     }
 
+    ; Debug: Show what was captured (comment out in production)
+    ToolTip "Captured: " . WheelMenuCapturedAddress
+    SetTimer () => ToolTip(), -1000
+
     ; Get mouse position for menu placement
     MouseGetPos &mx, &my
     WheelMenuOriginX := mx
@@ -994,11 +998,10 @@ ShowWheelMenu() {
     WheelMenuCenterX := WheelMenuSize // 2
     WheelMenuCenterY := WheelMenuSize // 2
 
-    ; Create layered GUI window
-    ; Note: Removed +E0x20 (WS_EX_TRANSPARENT) so window can receive mouse clicks
+    ; Create fullscreen layered GUI window to block mouse input to underlying windows
+    ; This prevents hover effects on hyperlinks/buttons underneath while menu is open
     WheelMenuGui := Gui("-Caption +E0x80000 +AlwaysOnTop +ToolWindow")
-    WheelMenuGui.Show("x" . (mx - WheelMenuCenterX) . " y" . (my - WheelMenuCenterY)
-        . " w" . WheelMenuSize . " h" . WheelMenuSize . " NoActivate")
+    WheelMenuGui.Show("x0 y0 w" . A_ScreenWidth . " h" . A_ScreenHeight . " NoActivate")
     WheelMenuHwnd := WheelMenuGui.Hwnd
 
     ; Create persistent GDI+ objects
