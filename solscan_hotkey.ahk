@@ -333,6 +333,57 @@ SaveSettings() {
     }
 }
 
+; Helper function to convert AutoHotkey syntax to readable format
+HotkeyToReadable(hotkeyStr) {
+    if (hotkeyStr == "")
+        return ""
+
+    readable := ""
+
+    ; Process each character and convert modifiers
+    i := 1
+    while (i <= StrLen(hotkeyStr)) {
+        char := SubStr(hotkeyStr, i, 1)
+
+        switch char {
+            case "^":
+                readable .= "Ctrl+"
+            case "!":
+                readable .= "Alt+"
+            case "+":
+                readable .= "Shift+"
+            case "#":
+                readable .= "Win+"
+            default:
+                ; This is the actual key, append the rest of the string
+                readable .= SubStr(hotkeyStr, i)
+                break
+        }
+        i++
+    }
+
+    ; Capitalize the key at the end
+    readable := StrUpper(readable)
+
+    return readable
+}
+
+; Helper function to convert readable format back to AutoHotkey syntax
+ReadableToHotkey(readableStr) {
+    if (readableStr == "")
+        return ""
+
+    hotkey := readableStr
+
+    ; Replace readable names with modifier symbols (case-insensitive)
+    hotkey := RegExReplace(hotkey, "i)Ctrl\+", "^")
+    hotkey := RegExReplace(hotkey, "i)Alt\+", "!")
+    hotkey := RegExReplace(hotkey, "i)Shift\+", "+")
+    hotkey := RegExReplace(hotkey, "i)Win\+", "#")
+
+    return hotkey
+}
+
 ShowSettingsWindow(*) {
     global WheelMenuHotkey, WheelMenuActions
 
@@ -341,9 +392,11 @@ ShowSettingsWindow(*) {
     ; Hotkey selection section
     settingsGui.Add("GroupBox", "x10 y10 w380 h100", "Wheel Menu Hotkey")
     settingsGui.Add("Text", "x20 y35", "Press any key or mouse button:")
-    hotkeyEdit := settingsGui.Add("Edit", "x20 y55 w200 vHotkeyInput ReadOnly", WheelMenuHotkey)
+    ; Display the hotkey in readable format
+    readableHotkey := HotkeyToReadable(WheelMenuHotkey)
+    hotkeyEdit := settingsGui.Add("Edit", "x20 y55 w200 vHotkeyInput ReadOnly", readableHotkey)
     settingsGui.Add("Button", "x230 y55 w80", "Record Key").OnEvent("Click", RecordHotkey.Bind(settingsGui, hotkeyEdit))
-    settingsGui.Add("Text", "x20 y85 cGray", "Examples: F13-F24, XButton1, XButton2, ^!F1 (Ctrl+Alt+F1)")
+    settingsGui.Add("Text", "x20 y85 cGray", "Examples: F13-F24, XButton1, Ctrl+Alt+F1")
 
     ; Pie wedge actions section
     settingsGui.Add("GroupBox", "x10 y120 w380 h225", "Pie Wedge Actions")
@@ -519,12 +572,19 @@ RecordHotkey(guiObj, editControl, *) {
         if (!hookActive || escapePressed)
             return
 
-        ; Parse the hotkey name to get the actual key combination
-        capturedKey := StrReplace(hotkeyName, "*", "")
-        capturedKey := StrReplace(capturedKey, "~", "")
+        ; The hotkeyName comes in with the ~ prefix, like "~^+t" for Ctrl+Shift+T
+        ; We need to remove only the leading ~ to get "^+t"
+        capturedKey := hotkeyName
+        if (SubStr(capturedKey, 1, 1) == "~") {
+            capturedKey := SubStr(capturedKey, 2)  ; Remove first character (~)
+        }
 
-        currentStatusText.Text := "Captured: " . capturedKey
-        CleanupAndFinish(capturedKey)
+        ; Convert to readable format for display
+        readableKey := HotkeyToReadable(capturedKey)
+        currentStatusText.Text := "Captured: " . readableKey
+
+        ; Pass the readable version to cleanup (will be displayed in textbox)
+        CleanupAndFinish(readableKey)
     }
 
     ; Cancel recording
@@ -649,14 +709,17 @@ SaveSettingsFromGui(guiObj, *) {
     ; Get submitted values
     submitted := guiObj.Submit(false)
 
-    ; Get hotkey from text field
-    WheelMenuHotkey := submitted.HotkeyInput
+    ; Get hotkey from text field (it's in readable format like "Ctrl+Shift+F")
+    readableHotkey := submitted.HotkeyInput
 
     ; Validate hotkey is not empty
-    if (WheelMenuHotkey == "") {
+    if (readableHotkey == "") {
         MsgBox("Please record a hotkey before saving!", "Invalid Hotkey", "OK Iconx")
         return
     }
+
+    ; Convert readable format back to AutoHotkey syntax
+    WheelMenuHotkey := ReadableToHotkey(readableHotkey)
 
     ; Get wedge actions - need to access controls directly to get numeric index
     actionList := ["Solscan", "Exclude", "Monitor", "Defined.fi", "Analyze", "Cancel"]
