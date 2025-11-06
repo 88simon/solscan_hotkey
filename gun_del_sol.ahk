@@ -6,10 +6,10 @@
 ; Version: 3.0 (AutoHotkey v2) - Wheel Menu Edition
 ;
 ; Recent changes:
-; - F13 now opens radial wheel menu with all actions
+; - Configurable wheel menu hotkey (defaults to backtick `)
 ; - Mouse gesture or keyboard (1-6) selection
 ; - Visual feedback with real-time hover states
-; - All existing hotkeys still work as direct shortcuts
+; - Settings dialog for customizing hotkeys and actions
 ; ============================================================================
 
 #Requires AutoHotkey v2.0
@@ -294,7 +294,7 @@ InitGdip()
 ; Settings Management
 ; ============================================================================
 
-global WheelMenuHotkey := "F14"  ; Current hotkey for wheel menu
+global WheelMenuHotkey := "``"  ; Current hotkey for wheel menu (backtick by default)
 global WheelMenuActions := [
     "Solscan",      ; Wedge 1 (Top)
     "Exclude",      ; Wedge 2 (Top-Right)
@@ -309,8 +309,8 @@ LoadSettings() {
 
     settingsFile := A_ScriptDir . "\gun_del_sol_settings.ini"
 
-    ; Load hotkey (default: F14)
-    WheelMenuHotkey := IniRead(settingsFile, "Hotkeys", "WheelMenu", "F14")
+    ; Load hotkey (default: backtick)
+    WheelMenuHotkey := IniRead(settingsFile, "Hotkeys", "WheelMenu", "``")
 
     ; Load wedge actions
     defaultActions := ["Solscan", "Exclude", "Monitor", "Defined.fi", "Analyze", "Cancel"]
@@ -745,7 +745,7 @@ SaveSettingsFromGui(guiObj, *) {
 ; Load settings on startup
 LoadSettings()
 
-; Legacy global variables (kept for F14 backward compatibility)
+; Global variables for action handlers
 global currentMainAddress := ""
 global excludedAddressesList := []
 
@@ -853,7 +853,7 @@ HandleSolscanLookupWithExclude() {
     ClipSaved := ClipboardAll()
     A_Clipboard := ""
 
-    ; Try to capture text under cursor (same as F14)
+    ; Try to capture text under cursor
     capturedText := CaptureTextUnderCursor()
 
     ; Restore clipboard immediately

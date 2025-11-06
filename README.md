@@ -3,9 +3,9 @@
 Gun Del Sol turns your mouse buttons into a Solana intelligence desk. The AutoHotkey script provides instant Solscan lookups, defined.fi token pivots, and a configurable wheel menu, while the optional monitoring service tracks wallets and analyzes early bidders through Helius.
 
 ## Top Features
-- **Radial wheel (F13 / XButton1)** – Choose Solscan lookup, exclusions, monitoring, defined.fi pivots, token analysis, or cancel with one gesture.
-- **Direct shortcuts** – F14 opens Solscan, F15 launches defined.fi, F16 queues early-bidder analysis, Ctrl+F14 registers addresses, Ctrl+Alt+Q exits.
+- **Radial wheel (configurable, defaults to `` ` ``)** – Choose Solscan lookup, exclusions, monitoring, defined.fi pivots, token analysis, or cancel with one gesture.
 - **Configurable hotkeys/actions** – Rebind the wheel hotkey or remap actions in the built-in Settings dialog (`Tray icon → Settings`).
+- **Native mouse button support** – Works directly with XButton1/XButton2 (mouse side buttons) without requiring F-key remapping.
 - **Defined.fi automation** – Tampermonkey user script opens tokens with pre-filled filters.
 - **Monitoring service (optional)** – Flask API + dashboard for watchlists, analysis jobs, CSV exports, and future Telegram alerts.
 
@@ -22,7 +22,7 @@ Gun Del Sol turns your mouse buttons into a Solana intelligence desk. The AutoHo
 ## Requirements
 - Windows 10 or later
 - AutoHotkey v2.x
-- Mouse with two side buttons *or* vendor software capable of sending F13–F16
+- Mouse with side buttons recommended (most mice work natively via XButton1/XButton2)
 
 Optional:
 - Tampermonkey (Chrome/Edge/Firefox) for defined.fi automation
@@ -31,14 +31,15 @@ Optional:
 
 ## Quick Start
 1. Install AutoHotkey v2 from <https://www.autohotkey.com/>.
-2. Map your mouse buttons (Logitech G HUB users should map to F13/F14; most mice expose XButton1/XButton2).
-3. Run `launch_gun_del_sol.bat` or double-click `gun_del_sol.ahk`. Look for the green **H** tray icon.
-4. Hover a Solana address and press F14 (or your mapped button). Solscan opens with high-signal filters applied.
+2. Run `launch_gun_del_sol.bat` or double-click `gun_del_sol.ahk`. Look for the green **H** tray icon.
+3. Press the backtick key (`` ` ``) to open the radial wheel menu, or open Settings from the tray icon to customize your hotkey.
+4. Hover over any action and click, or press number keys 1-6 to select instantly.
 
-## Wheel Menu (F13)
-- **Mouse** – hold F13, slide toward an action, release/click to execute.
-- **Keyboard** – press number keys 1–6 while holding F13.
-- **Cancel** – press Esc or release over slice 6.
+## Wheel Menu
+- **Default hotkey:** backtick (`` ` ``), fully customizable via `Tray icon → Settings`
+- **Mouse selection** – hold the hotkey, move toward an action, release or click to execute
+- **Keyboard selection** – press number keys 1–6 while the menu is open
+- **Cancel** – press Esc or select option 6
 
 Default wheel actions (configurable via Settings):
 1. **Solscan** – open hovered address
@@ -49,15 +50,15 @@ Default wheel actions (configurable via Settings):
 6. **Cancel** – close the wheel
 
 ## Optional Integrations
-### defined.fi Token Lookup (F15)
+### defined.fi Token Lookup
 1. Install Tampermonkey.
 2. Create a new script and paste `userscripts/defined-fi-autosearch.user.js`.
-3. Hover a token mint and press F15. The script focuses defined.fi, triggers Ctrl+K, pastes the mint, and navigates to the token page with your filters.
+3. Use the wheel menu's "Defined.fi" action to trigger automated token lookup with pre-filled filters.
 
-### Monitoring & Analysis (F16 / Ctrl+F14)
+### Monitoring & Analysis Service
 1. Copy `monitor/config.example.json` to `monitor/config.json` and set `helius_api_key`.
 2. Run `monitor/start_monitor_service.bat` (auto-installs dependencies, serves on `http://localhost:5001`).
-3. **Ctrl+F14** registers addresses to the watchlist. **F16** queues early-bidder analysis jobs; the dashboard lists buyers, USD volume, and CSV exports.
+3. Use the wheel menu's **Monitor** action to register addresses to the watchlist, or **Analyze** action to queue early-bidder analysis jobs. The dashboard lists buyers, USD volume, and CSV exports.
 
 More details, API routes, and troubleshooting live in `monitor/README.md`.
 

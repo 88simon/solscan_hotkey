@@ -3,8 +3,8 @@
 This Flask app powers the “backend brain” of Gun Del Sol. It accepts addresses from the hotkey script, stores watchlists, runs token analysis through Helius, and exposes everything via a dashboard and JSON API. It only listens on `localhost`, so your data never leaves the machine unless you call external APIs.
 
 ## Highlights
-- **Watchlist storage** – `Ctrl+F14` (or the dashboard) adds wallets, notes, and thresholds. Import/export as JSON at any time.
-- **Early-bidder analysis** – `F16` queues a job that fetches recent token activity from Helius, identifies large buyers, and surfaces CSV/PDF-ready results.
+- **Watchlist storage** – Use the wheel menu's "Monitor" action (or the dashboard) to add wallets, notes, and thresholds. Import/export as JSON at any time.
+- **Early-bidder analysis** – Use the wheel menu's "Analyze" action to queue a job that fetches recent token activity from Helius, identifies large buyers, and surfaces CSV/PDF-ready results.
 - **Web dashboard** – Browse `/addresses` and `/analysis` views, trigger exports, and check health status.
 - **REST API** – Automate registrations, pull job results, or hook into other tooling.
 
@@ -17,7 +17,7 @@ This Flask app powers the “backend brain” of Gun Del Sol. It accepts address
 1. Duplicate `monitor/config.example.json` → `monitor/config.json`. Add your Helius key if you want analysis.
 2. Start the service: double-click `start_monitor_service.bat` **or** run `python monitor_service.py`. Dependencies install on first launch.
 3. Visit <http://localhost:5001>. You should see the dashboard with green health status.
-4. From the hotkey script, press `Ctrl+F14` to register addresses and `F16` to queue analysis. Results appear under `/analysis`.
+4. From the hotkey script, open the wheel menu and use the "Monitor" action to register addresses or "Analyze" action to queue analysis jobs. Results appear under `/analysis`.
 
 ## Configuration
 `config.json` controls defaults:
