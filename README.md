@@ -1,113 +1,95 @@
 # Gun Del Sol
 
-Automate Solana wallet and token digging directly from your mouse side buttons. The toolkit couples a fast AutoHotkey script with optional browser automation and a local monitoring service that integrates with the Solscan blockchain explorer.
+Gun Del Sol turns your mouse buttons into a Solana intelligence desk. The AutoHotkey script provides instant Solscan lookups, defined.fi token pivots, and a configurable wheel menu, while the optional monitoring service tracks wallets and analyzes early bidders through Helius.
+
+## Top Features
+- **Radial wheel (F13 / XButton1)** – Choose Solscan lookup, exclusions, monitoring, defined.fi pivots, token analysis, or cancel with one gesture.
+- **Direct shortcuts** – F14 opens Solscan, F15 launches defined.fi, F16 queues early-bidder analysis, Ctrl+F14 registers addresses, Ctrl+Alt+Q exits.
+- **Configurable hotkeys/actions** – Rebind the wheel hotkey or remap actions in the built-in Settings dialog (`Tray icon → Settings`).
+- **Defined.fi automation** – Tampermonkey user script opens tokens with pre-filled filters.
+- **Monitoring service (optional)** – Flask API + dashboard for watchlists, analysis jobs, CSV exports, and future Telegram alerts.
 
 ## Project Layout
 
 | Path | Purpose |
 | --- | --- |
-| `gun_del_sol.ahk` | Primary AutoHotkey script (F13, F14, F15, F16 bindings) |
-| `launch_gun_del_sol.bat` | Helper launcher for the hotkey script |
-| `userscripts/defined-fi-autosearch.user.js` | Tampermonkey helper for defined.fi token lookup |
-| `monitor/` | Flask monitoring and analysis service (see `monitor/README.md`) |
-| `tools/test_mouse_buttons.ahk` | Diagnostics for mapping mouse buttons |
-
-## Core Hotkey Actions
-
-### Wheel Menu (F13 or XButton1)
-Press F13 to open a radial wheel menu with all available actions. Select by:
-- **Mouse gesture**: Move mouse toward desired action and click
-- **Keyboard**: Press number keys 1-6 to instantly select
-- **Cancel**: Press Esc or select option 6
-
-Available wheel menu actions:
-1. Open Solscan - look up the hovered address on Solscan
-2. Add Exclusion - filter out hovered address from current Solscan page
-3. Monitor Address - register address with monitoring service
-4. Defined.fi Lookup - analyze token on defined.fi
-5. Analyze Token - queue early bidder analysis via Helius API
-6. Cancel - close menu without action
-
-### Direct Hotkeys
-- `F14` or `XButton2`: open the selected Solana address on Solscan with opinionated filters.
-- `F15`: launch defined.fi and auto-search the hovered token mint (requires the Tampermonkey userscript).
-- `F16`: queue an "early bidder" analysis job through the monitoring service (Helius API key required).
-- `Ctrl + F14`: register an address with the monitoring service for future alerts.
-- `Ctrl + Alt + Q`: exit the AutoHotkey script.
+| `gun_del_sol.ahk` | Main AutoHotkey v2 script (wheel menu, shortcuts, settings dialog) |
+| `launch_gun_del_sol.bat` | Convenience launcher for the script |
+| `userscripts/defined-fi-autosearch.user.js` | Tampermonkey helper for defined.fi auto-search |
+| `monitor/` | Flask monitoring service (details in `monitor/README.md`) |
+| `tools/` | Diagnostics (`test_mouse_buttons.ahk`) and helpers |
 
 ## Requirements
+- Windows 10 or later
+- AutoHotkey v2.x
+- Mouse with two side buttons *or* vendor software capable of sending F13–F16
 
-- Windows 10 or later.
-- AutoHotkey v2.0 or newer.
-- Mouse with two side buttons or vendor software that can emit F13-F16.
+Optional:
+- Tampermonkey (Chrome/Edge/Firefox) for defined.fi automation
+- Python 3.9+ for the monitoring service
+- Helius API key (even free tier) to enable token analysis
 
-Optional components:
+## Quick Start
+1. Install AutoHotkey v2 from <https://www.autohotkey.com/>.
+2. Map your mouse buttons (Logitech G HUB users should map to F13/F14; most mice expose XButton1/XButton2).
+3. Run `launch_gun_del_sol.bat` or double-click `gun_del_sol.ahk`. Look for the green **H** tray icon.
+4. Hover a Solana address and press F14 (or your mapped button). Solscan opens with high-signal filters applied.
 
-- Tampermonkey (Chrome, Edge, or Firefox) for the defined.fi automation.
-- Python 3.9+ for the monitoring service.
-- Helius API key (free tier works for light use) for token analysis.
+## Wheel Menu (F13)
+- **Mouse** – hold F13, slide toward an action, release/click to execute.
+- **Keyboard** – press number keys 1–6 while holding F13.
+- **Cancel** – press Esc or release over slice 6.
 
-## Quick Start (Hotkey Only)
-
-1. Install AutoHotkey v2 from https://www.autohotkey.com/.
-2. Logitech G HUB users: map side buttons to F13 and F14. Other mice can rely on native `XButton1` and `XButton2`.
-3. Double-click `launch_gun_del_sol.bat` (or the `.ahk` file directly). Look for the green "H" tray icon.
-4. Hover over a Solana address and press F14 or XButton2. Solscan opens with large-transfer filters already applied.
+Default wheel actions (configurable via Settings):
+1. **Solscan** – open hovered address
+2. **Exclude** – add hovered address to Solscan filters
+3. **Monitor** – register address with the monitoring service
+4. **defined.fi** – open token page via Tampermonkey script
+5. **Analyze** – queue early-bidder analysis (Helius)
+6. **Cancel** – close the wheel
 
 ## Optional Integrations
+### defined.fi Token Lookup (F15)
+1. Install Tampermonkey.
+2. Create a new script and paste `userscripts/defined-fi-autosearch.user.js`.
+3. Hover a token mint and press F15. The script focuses defined.fi, triggers Ctrl+K, pastes the mint, and navigates to the token page with your filters.
 
-### Defined.fi Token Lookup (F15)
+### Monitoring & Analysis (F16 / Ctrl+F14)
+1. Copy `monitor/config.example.json` to `monitor/config.json` and set `helius_api_key`.
+2. Run `monitor/start_monitor_service.bat` (auto-installs dependencies, serves on `http://localhost:5001`).
+3. **Ctrl+F14** registers addresses to the watchlist. **F16** queues early-bidder analysis jobs; the dashboard lists buyers, USD volume, and CSV exports.
 
-1. Install Tampermonkey and create a new userscript.
-2. Paste the contents of `userscripts/defined-fi-autosearch.user.js`.
-3. Hover over a token mint and press F15. Defined.fi opens, triggers its Ctrl+K search, inserts the mint, and navigates to the token.
+More details, API routes, and troubleshooting live in `monitor/README.md`.
 
-### Token Early-Bidder Analysis (F16)
-
-1. Copy `monitor/config.example.json` to `monitor/config.json`.
-2. Add your Helius API key: `{"helius_api_key": "YOUR_KEY"}`.
-3. Launch `monitor/start_monitor_service.bat`. Dependencies install automatically and a Flask app starts on http://localhost:5001.
-4. Hover any token mint and press F16. A job is queued; the browser opens to the job dashboard with earliest buyers, USD spent, and CSV export.
-
-### Address Watchlist (Ctrl + F14)
-
-1. Make sure the monitoring service is running.
-2. Hover a wallet address, hold Ctrl, and press F14. The address is stored in `monitor/monitored_addresses.json`.
-3. Visit http://localhost:5001 to review, tag, or export the watchlist. Telegram notifications are planned for later phases; see `monitor/README.md` for the roadmap.
-
-## Directory Tips
-
-- You can run the hotkey script on its own. The monitoring service is optional and lives entirely inside `monitor/`.
-- Local state such as watchlists and analysis artifacts is git-ignored.
-- Keep browser helpers like Tampermonkey scripts under `userscripts/` so they are easy to version and share.
+## Customization
+- **Hotkeys & wheel actions** – `Tray icon → Settings` opens a GUI where you can record a new wheel hotkey and remap slices. Config is saved in `settings.ini`.
+- **Solscan filters & notifications** – edit `gun_del_sol.ahk` (search for `BuildSolscanUrl` and `ShowNotification`).
+- **defined.fi automation** – tweak the Tampermonkey script to pre-set filters such as minimum USD or toggle cluster.
+- **Monitoring service** – extend Flask routes or adjust analysis thresholds in `monitor/config.json`.
 
 ## Troubleshooting
+- **Mouse buttons ignored** – confirm AutoHotkey is running; use `tools/test_mouse_buttons.ahk` to identify button names; update mappings in vendor drivers if needed.
+- **Wheel hotkey not triggering** – open Settings and re-record the hotkey. Ensure no other app is intercepting it.
+- **defined.fi script fails** – verify the Tampermonkey script is enabled and refresh the page after installation. Check browser console for selector changes.
+- **Monitoring service offline** – run `python --version`, start the service manually (`python monitor_service.py`), and check for port collisions on 5001.
+- **Invalid address warning** – ensure a full Solana address (base58, 32–44 chars) is selected; avoid truncated UI elements.
 
-- **Mouse buttons not triggering:** confirm AutoHotkey is running, then use `test_mouse_buttons.ahk` to verify which button maps to which key. Rebind keys in vendor software if needed.
-- **Defined.fi search fails:** ensure the userscript is enabled and the site has finished loading. Refresh the page after installing or editing the script.
-- **Monitoring service unavailable:** verify `python --version` works inside the `monitor` folder and that the console prints `Running on http://localhost:5001`. Check that port 5001 is free.
-- **Invalid address pop-up:** only base58 addresses 32-44 characters long are accepted. Highlight the clean address without quotes or punctuation.
+## Directory Hygiene
+- The hotkey script works without the monitoring service. All optional state (watchlist, analysis results) stays inside `monitor/` and is git-ignored.
+- Keep browser automation scripts under `userscripts/` so you can share or version them.
+- When exporting or backing up data, copy `monitor/monitored_addresses.json` and `monitor/analysis_results/`.
 
-Additional troubleshooting, API endpoints, and configuration details are in `monitor/README.md`.
-
-## Customization Hints
-
-- Tweak Solscan filters, notification timing, and hotkey bindings directly in `gun_del_sol.ahk`.
-- Modify the defined.fi userscript to apply extra filters (for example a minimum USD size) once you inspect the page in DevTools.
-- Extend the monitoring service with new endpoints or schedulers; it already exposes `/analysis`, `/addresses`, and CSV exports.
+## Security / Privacy
+- Script activity remains local unless you enable Helius or defined.fi features. Clipboard contents are restored after each capture.
+- Monitoring service listens on `localhost` only. API keys stay in `monitor/config.json` or environment variables.
+- Git ignores personal data by default; add custom ignore rules if you store extra files.
 
 ## Uninstall
-
-1. Exit the AutoHotkey script (tray icon -> Exit or Ctrl + Alt + Q).
-2. Remove any shortcuts from the Windows Startup folder.
-3. Delete the repository directory. Optionally uninstall AutoHotkey or Python if you no longer need them.
-
-## Security Notes
-
-- All scripts run locally. The hotkey opens Solscan and defined.fi in your browser; the monitoring service only reaches out to Helius when configured.
-- Clipboard contents are restored after each hotkey run.
-- Watchlist data stays in `monitor/monitored_addresses.json`, which is ignored by git.
+1. Exit the AutoHotkey script (tray icon → Exit or press Ctrl+Alt+Q).
+2. Stop the monitoring service if running.
+3. Remove startup shortcuts if you created any.
+4. Delete the repository; optionally uninstall AutoHotkey/Python if you no longer need them.
 
 ---
 
-Enjoy faster Solana due diligence. Contributions, feedback, and new hotkey ideas are welcome.
+Gun Del Sol is built to be hacked on. Pull requests, issues, and feature ideas are welcome—especially around new wheel actions, defined.fi filters, and monitoring automations.
