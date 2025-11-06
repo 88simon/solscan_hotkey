@@ -215,6 +215,15 @@
             background: #38a169;
         }
 
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -476,6 +485,9 @@
                             <button class="action-btn btn-success" onclick="downloadAxiom(${token.id})">
                                 📥 Axiom JSON
                             </button>
+                            <button class="action-btn btn-danger" onclick="deleteToken(${token.id}, '${token.token_name || 'Unknown'}')">
+                                🗑️ Delete
+                            </button>
                         </td>
                     </tr>
                 `;
@@ -678,6 +690,51 @@
             } catch (error) {
                 showMessage('Error downloading Axiom JSON: ' + error.message, 'error');
             }
+        }
+
+        // Delete token
+        async function deleteToken(tokenId, tokenName) {
+            // Confirm deletion
+            const confirmMsg = `Are you sure you want to delete "${tokenName}"?\n\n` +
+                              `This will permanently remove:\n` +
+                              `• The token analysis record\n` +
+                              `• All associated wallet data\n` +
+                              `• The Axiom export JSON\n\n` +
+                              `This action cannot be undone.`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/tokens/${tokenId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    showMessage(data.error || 'Failed to delete token', 'error');
+                    return;
+                }
+
+                showMessage(`Successfully deleted "${tokenName}"`, 'success');
+
+                // Reload tokens list
+                await loadTokens();
+            } catch (error) {
+                showMessage('Error deleting token: ' + error.message, 'error');
+            }
+        }
+
+        // Copy address to clipboard
+        function copyAddress(address) {
+            navigator.clipboard.writeText(address).then(() => {
+                showMessage('Address copied to clipboard!', 'success');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                showMessage('Failed to copy address', 'error');
+            });
         }
 
         // Search

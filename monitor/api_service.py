@@ -405,11 +405,19 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours):
         except Exception as db_error:
             print(f"[Job {job_id}] Database save failed: {db_error}")
 
-        # Save result to file
+        # Save result to file with token name
         os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
-        result_file = os.path.join(ANALYSIS_RESULTS_DIR, f"{job_id}.json")
+        # Sanitize token name for filename (replace spaces and special chars)
+        safe_token_name = token_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        # Remove any other problematic characters for filenames
+        safe_token_name = ''.join(c for c in safe_token_name if c.isalnum() or c in ('_', '-'))
+        result_filename = f"{safe_token_name}.json"
+        result_file = os.path.join(ANALYSIS_RESULTS_DIR, result_filename)
         with open(result_file, 'w') as f:
             json.dump(result, f, indent=2)
+
+        # Store the result filename in the job for later retrieval
+        analysis_jobs[job_id]['result_file'] = result_filename
 
         # Add Axiom export info to result
         result['axiom_export'] = {
@@ -513,7 +521,13 @@ def get_analysis(job_id):
     # If completed, ensure result is loaded
     if job['status'] == 'completed' and job['result'] is None:
         try:
-            result_file = os.path.join(ANALYSIS_RESULTS_DIR, f"{job_id}.json")
+            # Try to load from the token-named file first
+            if 'result_file' in job:
+                result_file = os.path.join(ANALYSIS_RESULTS_DIR, job['result_file'])
+            else:
+                # Fallback to old job_id naming for backwards compatibility
+                result_file = os.path.join(ANALYSIS_RESULTS_DIR, f"{job_id}.json")
+
             with open(result_file, 'r') as f:
                 job['result'] = json.load(f)
         except Exception as e:
@@ -863,6 +877,26 @@ def get_token_by_id(token_id):
 
     except Exception as e:
         print(f"⚠ Error in /api/tokens/{token_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tokens/<int:token_id>', methods=['DELETE'])
+def delete_token_by_id(token_id):
+    """Delete an analyzed token and all associated data"""
+    try:
+        success = db.delete_analyzed_token(token_id)
+
+        if not success:
+            return jsonify({"error": "Token not found"}), 404
+
+        print(f"✓ Deleted token ID {token_id} via API")
+        return jsonify({
+            "status": "success",
+            "message": f"Token {token_id} deleted successfully"
+        }), 200
+
+    except Exception as e:
+        print(f"⚠ Error deleting token {token_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 

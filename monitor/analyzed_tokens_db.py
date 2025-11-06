@@ -344,5 +344,35 @@ def get_recent_activity(limit: int = 100) -> List[Dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def delete_analyzed_token(token_id: int) -> bool:
+    """
+    Delete an analyzed token and all associated data.
+
+    This will CASCADE delete:
+    - The token record from analyzed_tokens
+    - All associated wallets from early_buyer_wallets
+    - All wallet activity from wallet_activity
+
+    Args:
+        token_id: Database ID of the token to delete
+
+    Returns:
+        True if deleted successfully, False if token not found
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if token exists
+        cursor.execute('SELECT id FROM analyzed_tokens WHERE id = ?', (token_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Delete token (CASCADE will delete wallets and activity)
+        cursor.execute('DELETE FROM analyzed_tokens WHERE id = ?', (token_id,))
+
+        print(f"[Database] Deleted token ID {token_id} and all associated data")
+        return True
+
+
 # Initialize database on module import
 init_database()
