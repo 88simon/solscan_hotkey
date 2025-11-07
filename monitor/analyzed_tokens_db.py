@@ -64,11 +64,24 @@ def init_database():
             )
         ''')
 
+        # Analysis runs table - tracks each time we analyze a token
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS analysis_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_id INTEGER NOT NULL,
+                analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                wallets_found INTEGER DEFAULT 0,
+                credits_used INTEGER DEFAULT 0,
+                FOREIGN KEY (token_id) REFERENCES analyzed_tokens(id) ON DELETE CASCADE
+            )
+        ''')
+
         # Early buyer wallets table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS early_buyer_wallets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 token_id INTEGER NOT NULL,
+                analysis_run_id INTEGER NOT NULL,
                 wallet_address TEXT NOT NULL,
                 position INTEGER NOT NULL,
                 first_buy_usd REAL,
@@ -78,7 +91,8 @@ def init_database():
                 first_buy_timestamp TIMESTAMP,
                 axiom_name TEXT,
                 FOREIGN KEY (token_id) REFERENCES analyzed_tokens(id) ON DELETE CASCADE,
-                UNIQUE(token_id, wallet_address)
+                FOREIGN KEY (analysis_run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE,
+                UNIQUE(analysis_run_id, wallet_address)
             )
         ''')
 
@@ -142,6 +156,44 @@ def init_database():
         if 'last_analysis_credits' not in at_columns:
             print("[Database] Migrating: Adding last_analysis_credits column...")
             cursor.execute('ALTER TABLE analyzed_tokens ADD COLUMN last_analysis_credits INTEGER DEFAULT 0')
+
+        # Migration for analysis_run_id column in early_buyer_wallets
+        if 'analysis_run_id' not in ebw_columns:
+            print("[Database] Migrating: Adding analysis_run_id column to early_buyer_wallets...")
+            print("[Database] Warning: Existing wallet records will be linked to a default analysis run")
+
+            # Add the column (allowing NULL temporarily for migration)
+            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN analysis_run_id INTEGER')
+
+            # For each existing token, create an analysis_run entry
+            cursor.execute('SELECT DISTINCT token_id FROM early_buyer_wallets WHERE analysis_run_id IS NULL')
+            token_ids = cursor.fetchall()
+
+            for row in token_ids:
+                token_id = row[0]
+                # Get the token's analysis timestamp
+                cursor.execute('SELECT analysis_timestamp, wallets_found, last_analysis_credits FROM analyzed_tokens WHERE id = ?', (token_id,))
+                token_data = cursor.fetchone()
+
+                if token_data:
+                    analysis_timestamp, wallets_found, credits = token_data[0], token_data[1], token_data[2]
+
+                    # Create an analysis run for this token
+                    cursor.execute('''
+                        INSERT INTO analysis_runs (token_id, analysis_timestamp, wallets_found, credits_used)
+                        VALUES (?, ?, ?, ?)
+                    ''', (token_id, analysis_timestamp, wallets_found or 0, credits or 0))
+
+                    analysis_run_id = cursor.lastrowid
+
+                    # Link all existing wallets for this token to this analysis run
+                    cursor.execute('''
+                        UPDATE early_buyer_wallets
+                        SET analysis_run_id = ?
+                        WHERE token_id = ? AND analysis_run_id IS NULL
+                    ''', (analysis_run_id, token_id))
+
+            print("[Database] Migration complete: Existing wallets linked to analysis runs")
 
         print("[Database] Schema initialized successfully")
 
@@ -207,10 +259,17 @@ def save_analyzed_token(
         cursor.execute('SELECT id FROM analyzed_tokens WHERE token_address = ?', (token_address,))
         token_id = cursor.fetchone()['id']
 
-        # Delete existing wallets for this token (in case of re-analysis)
-        cursor.execute('DELETE FROM early_buyer_wallets WHERE token_id = ?', (token_id,))
+        # Create a new analysis run entry for this analysis
+        cursor.execute('''
+            INSERT INTO analysis_runs (token_id, wallets_found, credits_used)
+            VALUES (?, ?, ?)
+        ''', (token_id, len(early_bidders), credits_used))
 
-        # Insert early buyer wallets
+        analysis_run_id = cursor.lastrowid
+        print(f"[Database] Created analysis run #{analysis_run_id} for token {acronym}")
+
+        # Insert early buyer wallets linked to this analysis run
+        # NOTE: We do NOT delete existing wallets - we keep all historical analyses
         for index, bidder in enumerate(early_bidders[:10], start=1):
             total_usd = bidder.get('total_usd', 0)
             first_buy_usd = round(total_usd)
@@ -220,12 +279,13 @@ def save_analyzed_token(
 
             cursor.execute('''
                 INSERT INTO early_buyer_wallets (
-                    token_id, wallet_address, position, first_buy_usd,
+                    token_id, analysis_run_id, wallet_address, position, first_buy_usd,
                     total_usd, transaction_count, average_buy_usd,
                     first_buy_timestamp, axiom_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 token_id,
+                analysis_run_id,
                 bidder['wallet_address'],
                 index,
                 first_buy_usd,
@@ -236,7 +296,7 @@ def save_analyzed_token(
                 axiom_name
             ))
 
-        print(f"[Database] Saved token {acronym} with {len(early_bidders[:10])} wallets")
+        print(f"[Database] Saved token {acronym} with {len(early_bidders[:10])} wallets (run #{analysis_run_id})")
         return token_id
 
 
@@ -280,16 +340,51 @@ def get_token_details(token_id: int) -> Optional[Dict]:
         if token_dict.get('axiom_json'):
             token_dict['axiom_json'] = json.loads(token_dict['axiom_json'])
 
-        # Get associated wallets
+        # Get associated wallets from the most recent analysis run
         cursor.execute('''
-            SELECT * FROM early_buyer_wallets
-            WHERE token_id = ?
-            ORDER BY position ASC
+            SELECT ebw.* FROM early_buyer_wallets ebw
+            JOIN analysis_runs ar ON ebw.analysis_run_id = ar.id
+            WHERE ebw.token_id = ?
+            ORDER BY ar.analysis_timestamp DESC, ebw.position ASC
+            LIMIT 10
         ''', (token_id,))
 
         token_dict['wallets'] = [dict(row) for row in cursor.fetchall()]
 
         return token_dict
+
+
+def get_token_analysis_history(token_id: int) -> List[Dict]:
+    """
+    Get all analysis runs for a token, most recent first.
+    Each run includes its wallets.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get all analysis runs for this token
+        cursor.execute('''
+            SELECT id, analysis_timestamp, wallets_found, credits_used
+            FROM analysis_runs
+            WHERE token_id = ?
+            ORDER BY analysis_timestamp DESC
+        ''', (token_id,))
+
+        runs = []
+        for run_row in cursor.fetchall():
+            run_dict = dict(run_row)
+
+            # Get wallets for this specific run
+            cursor.execute('''
+                SELECT * FROM early_buyer_wallets
+                WHERE analysis_run_id = ?
+                ORDER BY position ASC
+            ''', (run_dict['id'],))
+
+            run_dict['wallets'] = [dict(w) for w in cursor.fetchall()]
+            runs.append(run_dict)
+
+        return runs
 
 
 def get_wallet_activity(wallet_id: int, limit: int = 50) -> List[Dict]:

@@ -23,7 +23,7 @@ DEBUG MODE (Troubleshooting):
 # ============================================================================
 # SINGLE KILLSWITCH - Change this ONE value to control ALL logging
 # ============================================================================
-DEBUG_MODE = False  # Set to True to enable ALL debug logging
+DEBUG_MODE = True  # Set to True to enable ALL debug logging
 # ============================================================================
 
 

@@ -3,12 +3,14 @@ Helius API Integration for Solana Token Analysis
 Provides functions to analyze tokens and extract early bidder data
 """
 
+from __future__ import annotations
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import base58
 import re
 from debug_config import is_debug_enabled
+import builtins
 
 # ============================================================================
 # OPSEC: PRODUCTION MODE - Disable Sensitive Logging
@@ -19,7 +21,7 @@ from debug_config import is_debug_enabled
 def safe_print(*args, **kwargs):
     """Only print if debug mode is enabled in debug_config.py"""
     if is_debug_enabled():
-        print(*args, **kwargs)
+        builtins.print(*args, **kwargs)
 
 # Replace built-in print with safe version
 print = safe_print
@@ -81,15 +83,21 @@ class HeliusAPI:
         except Exception as e:
             raise Exception(f"Enhanced API call failed: {str(e)}")
 
-    def get_token_metadata(self, mint_address: str) -> Optional[Dict]:
-        """Get token metadata including name, symbol, etc."""
+    def get_token_metadata(self, mint_address: str) -> tuple[Optional[Dict], int]:
+        """
+        Get token metadata including name, symbol, etc.
+
+        Returns:
+            Tuple of (metadata dict, credits_used)
+        """
         try:
             # Try the regular token metadata endpoint first
             result = self._enhanced_call('token-metadata', {
                 'mintAccounts': mint_address
             })
             if result and result[0]:
-                return result[0]
+                # Enhanced API token-metadata costs 1 credit
+                return result[0], 1
         except Exception as e:
             print(f"Error fetching token metadata (standard): {str(e)}")
 
@@ -124,7 +132,7 @@ class HeliusAPI:
                 print(f"[Helius] DAS API found: {token_name} ({token_symbol})")
 
                 # Format it similar to standard metadata response
-                return {
+                formatted = {
                     'onChainMetadata': {
                         'metadata': {
                             'name': token_name,
@@ -133,12 +141,34 @@ class HeliusAPI:
                     },
                     'legacyMetadata': metadata
                 }
+                # DAS API getAsset costs 1 credit
+                return formatted, 1
         except Exception as das_error:
             print(f"Error fetching token metadata (DAS): {str(das_error)}")
 
-        return None
+        return None, 0
 
-    def get_parsed_transactions(self, address: str, limit: int = 100, get_earliest: bool = False) -> List[Dict]:
+    def get_token_creation_time(self, mint_address: str) -> tuple[Optional[int], int]:
+        """
+        Get the token creation timestamp by finding the first transaction.
+
+        NOTE: This method is currently DISABLED because it's too expensive.
+        It would require paginating through ALL transactions just to find the first one.
+
+        Instead, we'll just return None and let the transaction fetching handle it naturally.
+
+        Args:
+            mint_address: Token mint address
+
+        Returns:
+            Tuple of (creation_timestamp in unix time, credits_used)
+        """
+        # DISABLED: This is too expensive - would need to paginate through potentially
+        # tens of thousands of signatures just to find the first one
+        print(f"[Helius] Skipping token creation time lookup (too expensive)")
+        return None, 0
+
+    def get_parsed_transactions(self, address: str, limit: int = 100, get_earliest: bool = False, token_creation_time: int = None) -> tuple[List[Dict], int]:
         """
         Get parsed transaction history for an address.
         Returns transactions with decoded swap/transfer data.
@@ -148,27 +178,34 @@ class HeliusAPI:
             limit: Maximum number of transactions to fetch
             get_earliest: If True, fetches earliest transactions from token creation.
                          If False, fetches most recent transactions (default)
+            token_creation_time: Unix timestamp of token creation (optional, improves efficiency)
+
+        Returns:
+            Tuple of (List of transactions, API credits used)
         """
         try:
             if get_earliest:
-                # Fetch earliest transactions by paginating from the beginning
-                return self._get_earliest_transactions(address, limit)
+                # Fetch earliest transactions using the new efficient method
+                return self._get_earliest_transactions_new(address, limit, token_creation_time)
 
             # Get transaction signatures first (most recent by default)
+            # NOTE: getSignaturesForAddress costs 1 credit per call on Helius paid plans
             signatures = self._rpc_call('getSignaturesForAddress', [
                 address,
                 {"limit": limit}
             ])
+            signature_api_calls = 1  # 1 credit for the signature fetch
 
             if not signatures:
-                return []
+                return [], signature_api_calls
 
             sig_list = [sig['signature'] for sig in signatures[:limit]]
             print(f"[Helius] Fetching details for {len(sig_list)} transactions...")
 
             # Fetch transactions individually using RPC method
-            # This is more reliable than the Enhanced API batch endpoint
+            # Each getTransaction call costs 1 credit
             all_transactions = []
+            transaction_api_calls = 0
 
             for i, signature in enumerate(sig_list):
                 if i % 50 == 0:  # Progress indicator every 50 transactions
@@ -183,6 +220,7 @@ class HeliusAPI:
                             "maxSupportedTransactionVersion": 0
                         }
                     ])
+                    transaction_api_calls += 1  # 1 credit per getTransaction call
 
                     if tx_data:
                         # Extract relevant transaction info
@@ -194,39 +232,150 @@ class HeliusAPI:
                     # Skip individual transaction errors
                     continue
 
+            total_credits = signature_api_calls + transaction_api_calls
             print(f"[Helius] Total transactions retrieved: {len(all_transactions)}")
-            return all_transactions
+            print(f"[Helius] API credits used: {signature_api_calls} signature calls + {transaction_api_calls} transaction calls = {total_credits} total")
+            return all_transactions, total_credits
 
         except Exception as e:
             print(f"Error fetching parsed transactions: {str(e)}")
-            return []
+            return [], 0
 
-    def _get_earliest_transactions(self, address: str, limit: int = 500) -> List[Dict]:
+    def _get_earliest_transactions_new(self, address: str, limit: int = 500, token_creation_time: int = None) -> tuple[List[Dict], int]:
         """
-        Fetch earliest transactions for an address by paginating backwards.
-
-        Solana's getSignaturesForAddress returns transactions newest-first.
-        To get earliest transactions, we need to:
-        1. Paginate backwards until we find all transactions
-        2. Reverse the order to get oldest-first
-        3. Return the first 'limit' transactions
+        Fetch earliest transactions for an address using Helius's getTransactionsForAddress.
+        This is MUCH more efficient than the old method - uses timestamp filtering and ascending order.
 
         Args:
             address: Solana address to fetch transactions for
             limit: Maximum number of earliest transactions to return
+            token_creation_time: Unix timestamp of token creation (optional)
 
         Returns:
-            List of parsed transactions, oldest first
+            Tuple of (List of parsed transactions oldest first, API credits used)
         """
-        print(f"[Helius] Fetching earliest transactions by paginating backwards...")
+        print(f"[Helius] Fetching earliest transactions using getTransactionsForAddress (efficient method)...")
+        if token_creation_time:
+            print(f"[Helius] Filtering from token creation time: {datetime.fromtimestamp(token_creation_time)}")
+
+        all_transactions = []
+        api_calls = 0
+        pagination_token = None
+
+        try:
+            # getTransactionsForAddress costs 100 credits per call
+            # Can fetch up to 100 transactions with full details per call
+            # We'll need multiple calls if limit > 100
+            remaining_limit = min(limit, 500)  # Cap at 500 for safety
+
+            while remaining_limit > 0:
+                batch_limit = min(remaining_limit, 100)  # Max 100 per call with full details
+
+                # Build request params
+                params = [
+                    address,
+                    {
+                        "transactionDetails": "full",  # Get full transaction details
+                        "limit": batch_limit,
+                        "sortOrder": "asc"  # Ascending = oldest first!
+                    }
+                ]
+
+                # Add timestamp filter if we have token creation time
+                if token_creation_time:
+                    params[1]["filters"] = {
+                        "blockTime": {
+                            "gte": token_creation_time  # Greater than or equal to creation time
+                        }
+                    }
+
+                # Add pagination token if we have one
+                if pagination_token:
+                    params[1]["paginationToken"] = pagination_token
+
+                print(f"[Helius] Calling getTransactionsForAddress (batch limit: {batch_limit})...")
+                print(f"[Helius] Request params: {params}")
+
+                # Make the RPC call
+                result = self._rpc_call('getTransactionsForAddress', params)
+                api_calls += 1  # 100 credits per call
+
+                print(f"[Helius] Raw result type: {type(result)}")
+                print(f"[Helius] Raw result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
+
+                if not result:
+                    print(f"[Helius] Result is empty/None, breaking")
+                    break
+
+                # Extract transactions and pagination token
+                # Note: getTransactionsForAddress returns 'data', not 'transactions'
+                transactions = result.get('data', [])
+                pagination_token = result.get('paginationToken')
+
+                print(f"[Helius] Received {len(transactions)} transactions in this batch")
+                print(f"[Helius] Pagination token: {pagination_token}")
+
+                # Parse each transaction
+                for tx_data in transactions:
+                    try:
+                        # tx_data is already the full transaction object
+                        signature = tx_data.get('signature')
+                        parsed_tx = self._parse_rpc_transaction(tx_data, signature)
+                        if parsed_tx:
+                            all_transactions.append(parsed_tx)
+                    except Exception as parse_error:
+                        continue
+
+                remaining_limit -= len(transactions)
+
+                # If no pagination token or no more transactions, we're done
+                if not pagination_token or len(transactions) == 0:
+                    break
+
+                # If we got fewer than requested, we've reached the end
+                if len(transactions) < batch_limit:
+                    break
+
+            total_credits = api_calls * 100  # Each call costs 100 credits
+            print(f"[Helius] Total transactions retrieved: {len(all_transactions)}")
+            print(f"[Helius] API credits used: {api_calls} calls × 100 credits = {total_credits} total")
+
+            return all_transactions, total_credits
+
+        except Exception as e:
+            print(f"[Helius] ERROR in getTransactionsForAddress: {str(e)}")
+            import traceback
+            print(f"[Helius] Traceback: {traceback.format_exc()}")
+            # Fall back to old method if new method fails
+            print(f"[Helius] Falling back to old pagination method...")
+            return self._get_earliest_transactions_old(address, limit, token_creation_time)
+
+    def _get_earliest_transactions_old(self, address: str, limit: int = 500, token_creation_time: int = None) -> tuple[List[Dict], int]:
+        """
+        OLD METHOD: Fetch earliest transactions for an address via backward pagination.
+        This is kept as a fallback but is MUCH less efficient than the new method.
+
+        Args:
+            address: Solana address to fetch transactions for
+            limit: Maximum number of earliest transactions to return
+            token_creation_time: Unix timestamp of token creation (optional)
+
+        Returns:
+            Tuple of (List of parsed transactions oldest first, API credits used)
+        """
+        print(f"[Helius] Fetching earliest transactions (OLD backward pagination method)...")
+        if token_creation_time:
+            print(f"[Helius] Starting from token creation time: {datetime.fromtimestamp(token_creation_time)}")
 
         all_signatures = []
         batch_size = 1000  # Max allowed by Solana RPC
         before_signature = None
         total_fetched = 0
+        signature_api_calls = 0
 
         try:
             # Paginate backwards to get all transaction signatures
+            # NOTE: getSignaturesForAddress costs 1 credit per call on Helius paid plans
             while True:
                 params = [address, {"limit": batch_size}]
                 if before_signature:
@@ -234,14 +383,38 @@ class HeliusAPI:
 
                 # Fetch batch of signatures
                 signatures = self._rpc_call('getSignaturesForAddress', params)
+                signature_api_calls += 1  # 1 credit per pagination call
 
                 if not signatures:
                     break
 
-                all_signatures.extend(signatures)
-                total_fetched += len(signatures)
+                # If we have a token creation time, filter out transactions before it
+                if token_creation_time:
+                    filtered_sigs = []
+                    found_older_than_creation = False
+                    for sig in signatures:
+                        sig_time = sig.get('blockTime')
+                        if sig_time and sig_time >= token_creation_time:
+                            filtered_sigs.append(sig)
+                        elif sig_time and sig_time < token_creation_time:
+                            # We've gone past the creation time, stop pagination after this batch
+                            found_older_than_creation = True
+                            print(f"[Helius] Reached token creation time ({datetime.fromtimestamp(token_creation_time)}), stopping pagination")
+                            break
 
-                print(f"[Helius] Fetched {total_fetched} signatures so far...")
+                    # Add any filtered signatures from this batch
+                    if filtered_sigs:
+                        all_signatures.extend(filtered_sigs)
+                        total_fetched += len(filtered_sigs)
+
+                    # Stop if we found older transactions or no more filtered results
+                    if found_older_than_creation or (not filtered_sigs and before_signature):
+                        break
+                else:
+                    all_signatures.extend(signatures)
+                    total_fetched += len(signatures)
+
+                print(f"[Helius] Fetched {total_fetched} signatures so far ({signature_api_calls} pagination calls)...")
 
                 # If we got fewer than batch_size, we've reached the beginning
                 if len(signatures) < batch_size:
@@ -250,12 +423,12 @@ class HeliusAPI:
                 # Use the last signature as the 'before' cursor for next batch
                 before_signature = signatures[-1]['signature']
 
-                # Safety limit: don't fetch more than 10,000 signatures total
-                if total_fetched >= 10000:
-                    print(f"[Helius] Reached safety limit of 10,000 signatures")
+                # Safety limit: don't fetch more than 50,000 signatures total
+                if total_fetched >= 50000:
+                    print(f"[Helius] Reached safety limit of 50,000 signatures")
                     break
 
-            print(f"[Helius] Total signatures fetched: {total_fetched}")
+            print(f"[Helius] Total signatures fetched: {total_fetched} ({signature_api_calls} getSignaturesForAddress calls)")
 
             # Reverse to get oldest-first, then take the first 'limit' transactions
             all_signatures.reverse()
@@ -264,7 +437,9 @@ class HeliusAPI:
             print(f"[Helius] Processing {len(earliest_signatures)} earliest signatures...")
 
             # Now fetch full transaction data for these earliest signatures
+            # Each getTransaction call costs 1 credit
             all_transactions = []
+            transaction_api_calls = 0
 
             for i, sig_obj in enumerate(earliest_signatures):
                 if i % 50 == 0:
@@ -279,6 +454,7 @@ class HeliusAPI:
                             "maxSupportedTransactionVersion": 0
                         }
                     ])
+                    transaction_api_calls += 1  # 1 credit per getTransaction call
 
                     if tx_data:
                         parsed_tx = self._parse_rpc_transaction(tx_data, signature)
@@ -289,12 +465,14 @@ class HeliusAPI:
                     # Skip individual transaction errors
                     continue
 
+            total_credits = signature_api_calls + transaction_api_calls
             print(f"[Helius] Successfully retrieved {len(all_transactions)} earliest transactions")
-            return all_transactions
+            print(f"[Helius] API credits used: {signature_api_calls} signature calls + {transaction_api_calls} transaction calls = {total_credits} total")
+            return all_transactions, total_credits
 
         except Exception as e:
             print(f"Error fetching earliest transactions: {str(e)}")
-            return []
+            return [], 0
 
     def _parse_rpc_transaction(self, tx_data: dict, signature: str) -> dict:
         """
@@ -403,7 +581,7 @@ class HeliusAPI:
         self,
         mint_address: str,
         min_usd: float = 50.0,
-        time_window_hours: int = 24,
+        time_window_hours: int = 999999,
         max_transactions: int = 500
     ) -> Dict:
         """
@@ -412,7 +590,7 @@ class HeliusAPI:
         Args:
             mint_address: Token mint address to analyze
             min_usd: Minimum USD amount to consider (default: $50)
-            time_window_hours: Hours from first transaction to consider (default: 24)
+            time_window_hours: Hours from first transaction to consider (default: 999999, effectively unlimited)
             max_transactions: Maximum transactions to analyze (default: 500)
 
         Returns:
@@ -438,26 +616,43 @@ class HeliusAPI:
         print(f"[Helius] Analyzing token: {mint_address}")
 
         # Get token metadata
-        token_info = self.get_token_metadata(mint_address)
+        token_info, metadata_credits = self.get_token_metadata(mint_address)
         if token_info:
             token_name = token_info.get('onChainMetadata', {}).get('metadata', {}).get('name', 'Unknown')
-            print(f"[Helius] Token info: {token_name}")
+            print(f"[Helius] Token info: {token_name} (used {metadata_credits} credits)")
         else:
             print(f"[Helius] Token info: Unknown (metadata not available)")
 
-        # Get transaction history - ALWAYS fetch earliest transactions for early bidder analysis
+        # First, find the token creation time
+        token_creation_time, creation_time_credits = self.get_token_creation_time(mint_address)
+
+        # Get transaction history - fetch earliest transactions starting from token creation
         print(f"[Helius] Fetching up to {max_transactions} EARLIEST transactions...")
-        transactions = self.get_parsed_transactions(mint_address, limit=max_transactions, get_earliest=True)
-        print(f"[Helius] Retrieved {len(transactions)} earliest transactions")
+        if token_creation_time:
+            transactions, transaction_credits = self.get_parsed_transactions(
+                mint_address,
+                limit=max_transactions,
+                get_earliest=True,
+                token_creation_time=token_creation_time
+            )
+        else:
+            # Fallback to old method if we can't determine creation time
+            print(f"[Helius] Warning: Could not determine token creation time, using fallback method")
+            transactions, transaction_credits = self.get_parsed_transactions(mint_address, limit=max_transactions, get_earliest=True)
+
+        print(f"[Helius] Retrieved {len(transactions)} earliest transactions (used {transaction_credits} API credits)")
 
         if not transactions:
+            # Still need to report credits used even if no transactions found
+            total_credits = metadata_credits + creation_time_credits + transaction_credits
             return {
                 'token_address': mint_address,
                 'token_info': token_info,
                 'error': 'No transactions found',
                 'early_bidders': [],
                 'total_unique_buyers': 0,
-                'total_transactions_analyzed': 0
+                'total_transactions_analyzed': 0,
+                'api_credits_used': total_credits
             }
 
         # Find first transaction timestamp
@@ -469,13 +664,16 @@ class HeliusAPI:
                 break
 
         if not first_tx_time:
+            # Still need to report credits used even if can't determine time
+            total_credits = metadata_credits + creation_time_credits + transaction_credits
             return {
                 'token_address': mint_address,
                 'token_info': token_info,
                 'error': 'Could not determine first transaction time',
                 'early_bidders': [],
                 'total_unique_buyers': 0,
-                'total_transactions_analyzed': 0
+                'total_transactions_analyzed': 0,
+                'api_credits_used': total_credits
             }
 
         window_end = first_tx_time + timedelta(hours=time_window_hours)
@@ -548,14 +746,10 @@ class HeliusAPI:
 
         print(f"[Helius] Found {len(early_bidders)} early bidders (>${min_usd} USD)")
 
-        # Estimate API credits used
-        # 1-2 credits for metadata calls + signature pagination credits + transaction fetch credits
-        signature_pagination_calls = max(1, (len(transactions) // 1000) + 1)  # Paginated at 1000 per batch
-        metadata_calls = 2  # token-metadata + potential DAS API fallback
-        transaction_calls = len(transactions)  # 1 credit per transaction fetched
-        estimated_credits = metadata_calls + signature_pagination_calls + transaction_calls
+        # Calculate actual API credits used
+        total_credits = metadata_credits + creation_time_credits + transaction_credits
 
-        print(f"[Helius] Estimated API credits used: {estimated_credits}")
+        print(f"[Helius] Total API credits used: {total_credits} ({metadata_credits} metadata + {creation_time_credits} creation time lookup + {transaction_credits} transactions)")
 
         return {
             'token_address': mint_address,
@@ -565,7 +759,7 @@ class HeliusAPI:
             'early_bidders': early_bidders,
             'total_unique_buyers': len(early_bidders),
             'total_transactions_analyzed': len(transactions),
-            'api_credits_used': estimated_credits
+            'api_credits_used': total_credits
         }
 
     def _extract_buy_info(self, tx: dict, mint_address: str, debug_first: bool = False) -> tuple:
@@ -755,7 +949,7 @@ class TokenAnalyzer:
         self,
         mint_address: str,
         min_usd: float = 50.0,
-        time_window_hours: int = 24
+        time_window_hours: int = 999999
     ) -> Dict:
         """
         Analyze a token to find early bidders.
@@ -763,7 +957,7 @@ class TokenAnalyzer:
         Args:
             mint_address: Token mint address
             min_usd: Minimum USD threshold (default: $50)
-            time_window_hours: Analysis window in hours (default: 24)
+            time_window_hours: Analysis window in hours (default: 999999, effectively unlimited)
 
         Returns:
             Analysis results dictionary

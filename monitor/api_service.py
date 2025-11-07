@@ -31,15 +31,7 @@ from debug_config import is_debug_enabled
 # OPSEC: PRODUCTION MODE - Disable Sensitive Logging
 # ============================================================================
 # Debug logging is controlled by debug_config.py - change DEBUG_MODE there
-# ============================================================================
-
-def safe_print(*args, **kwargs):
-    """Only print if debug mode is enabled in debug_config.py"""
-    if is_debug_enabled():
-        print(*args, **kwargs)
-
-# Replace built-in print with safe version
-print = safe_print
+# Note: helius_api.py handles print override, don't override here to avoid recursion
 # ============================================================================
 
 app = Flask(__name__)
@@ -69,9 +61,9 @@ def load_api_key():
                 config = json.load(f)
                 return config.get('helius_api_key')
         except Exception as e:
-            print(f"⚠ Error loading config.json: {e}")
+            print(f"[WARN] Error loading config.json: {e}")
 
-    print("⚠ WARNING: No Helius API key found!")
+    print("[WARN] WARNING: No Helius API key found!")
     print("   Set HELIUS_API_KEY environment variable or create config.json")
     print("   Example config.json: {\"helius_api_key\": \"your-key-here\"}")
     return None
@@ -87,11 +79,11 @@ try:
     from helius_api import TokenAnalyzer, generate_axiom_export, generate_token_acronym, WebhookManager
     import analyzed_tokens_db as db
     helius_enabled = True
-    print("✓ Helius API module loaded")
-    print("✓ Database module loaded")
+    print("[OK] Helius API module loaded")
+    print("[OK] Database module loaded")
 except ImportError as e:
     helius_enabled = False
-    print(f"⚠ Helius API not available: {e}")
+    print(f"[WARN] Helius API not available: {e}")
 
 
 def load_addresses():
@@ -101,13 +93,13 @@ def load_addresses():
         try:
             with open(DATA_FILE, 'r') as f:
                 monitored_addresses = json.load(f)
-            print(f"✓ Loaded {len(monitored_addresses)} monitored addresses from {DATA_FILE}")
+            print(f"[OK] Loaded {len(monitored_addresses)} monitored addresses from {DATA_FILE}")
         except Exception as e:
-            print(f"⚠ Error loading addresses: {e}")
+            print(f"[WARN] Error loading addresses: {e}")
             monitored_addresses = {}
     else:
         monitored_addresses = {}
-        print(f"⚠ No existing data file found. Starting fresh.")
+        print(f"[WARN] No existing data file found. Starting fresh.")
 
 
 def save_addresses():
@@ -117,7 +109,7 @@ def save_addresses():
             json.dump(monitored_addresses, f, indent=2)
         return True
     except Exception as e:
-        print(f"⚠ Error saving addresses: {e}")
+        print(f"[WARN] Error saving addresses: {e}")
         return False
 
 
@@ -200,7 +192,7 @@ def register_address():
             return jsonify({"error": "Failed to save address"}), 500
 
     except Exception as e:
-        print(f"⚠ Error in /register: {e}")
+        print(f"[WARN] Error in /register: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -228,7 +220,7 @@ def remove_address(address):
     if address in monitored_addresses:
         del monitored_addresses[address]
         save_addresses()
-        print(f"✓ Removed address: {address}")
+        print(f"[OK] Removed address: {address}")
         return jsonify({
             "status": "success",
             "message": "Address removed from monitoring",
@@ -260,7 +252,7 @@ def update_note(address):
 
         monitored_addresses[address]['note'] = note
         save_addresses()
-        print(f"✓ Updated note for address: {address}")
+        print(f"[OK] Updated note for address: {address}")
 
         return jsonify({
             "status": "success",
@@ -270,7 +262,7 @@ def update_note(address):
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error updating note: {e}")
+        print(f"[WARN] Error updating note: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -305,7 +297,7 @@ def import_addresses():
                         skipped += 1
 
         save_addresses()
-        print(f"✓ Imported {added} addresses ({skipped} skipped as duplicates)")
+        print(f"[OK] Imported {added} addresses ({skipped} skipped as duplicates)")
 
         return jsonify({
             "status": "success",
@@ -316,7 +308,7 @@ def import_addresses():
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error importing addresses: {e}")
+        print(f"[WARN] Error importing addresses: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -327,7 +319,7 @@ def clear_all():
     count = len(monitored_addresses)
     monitored_addresses = {}
     save_addresses()
-    print(f"⚠ Cleared all {count} monitored addresses")
+    print(f"[WARN] Cleared all {count} monitored addresses")
     return jsonify({
         "status": "success",
         "message": f"Cleared {count} addresses",
@@ -458,7 +450,7 @@ def analyze_token():
     {
         "address": "TokenMintAddress...",
         "min_usd": 50,  # optional, default 50
-        "time_window_hours": 24  # optional, default 24
+        "time_window_hours": 999999  # optional, default 999999 (effectively unlimited)
     }
     """
     if not helius_enabled:
@@ -478,7 +470,7 @@ def analyze_token():
 
         # Get analysis parameters
         min_usd = float(data.get('min_usd', 50))
-        time_window_hours = int(data.get('time_window_hours', 24))
+        time_window_hours = int(data.get('time_window_hours', 999999))
 
         # Create analysis job
         job_id = str(uuid.uuid4())[:8]
@@ -498,7 +490,7 @@ def analyze_token():
         thread.daemon = True
         thread.start()
 
-        print(f"✓ Queued token analysis: {token_address} (Job ID: {job_id})")
+        print(f"[OK] Queued token analysis: {token_address} (Job ID: {job_id})")
 
         return jsonify({
             'status': 'queued',
@@ -510,7 +502,7 @@ def analyze_token():
         }), 202
 
     except Exception as e:
-        print(f"⚠ Error in /analyze/token: {e}")
+        print(f"[WARN] Error in /analyze/token: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -698,7 +690,7 @@ def create_wallet_webhook():
         }), 201
 
     except Exception as e:
-        print(f"⚠ Error creating webhook: {e}")
+        print(f"[WARN] Error creating webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -718,7 +710,7 @@ def list_webhooks():
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error listing webhooks: {e}")
+        print(f"[WARN] Error listing webhooks: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -735,7 +727,7 @@ def get_webhook_details(webhook_id):
         return jsonify(webhook), 200
 
     except Exception as e:
-        print(f"⚠ Error getting webhook: {e}")
+        print(f"[WARN] Error getting webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -755,7 +747,7 @@ def delete_webhook(webhook_id):
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error deleting webhook: {e}")
+        print(f"[WARN] Error deleting webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -823,7 +815,7 @@ def webhook_callback():
         return jsonify({"status": "success", "processed": len(transactions)}), 200
 
     except Exception as e:
-        print(f"⚠ Webhook callback error: {e}")
+        print(f"[WARN] Webhook callback error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -864,7 +856,7 @@ def get_token_history():
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error in /api/tokens/history: {e}")
+        print(f"[WARN] Error in /api/tokens/history: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -880,7 +872,27 @@ def get_token_by_id(token_id):
         return jsonify(token_details), 200
 
     except Exception as e:
-        print(f"⚠ Error in /api/tokens/{token_id}: {e}")
+        print(f"[WARN] Error in /api/tokens/{token_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tokens/<int:token_id>/history', methods=['GET'])
+def get_token_analysis_history(token_id):
+    """Get all analysis runs for a token with their wallets"""
+    try:
+        history = db.get_token_analysis_history(token_id)
+
+        if not history:
+            return jsonify({"error": "No analysis history found"}), 404
+
+        return jsonify({
+            "token_id": token_id,
+            "total_runs": len(history),
+            "runs": history
+        }), 200
+
+    except Exception as e:
+        print(f"[WARN] Error getting analysis history for token {token_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -893,14 +905,14 @@ def delete_token_by_id(token_id):
         if not success:
             return jsonify({"error": "Token not found"}), 404
 
-        print(f"✓ Deleted token ID {token_id} via API")
+        print(f"[OK] Deleted token ID {token_id} via API")
         return jsonify({
             "status": "success",
             "message": f"Token {token_id} deleted successfully"
         }), 200
 
     except Exception as e:
-        print(f"⚠ Error deleting token {token_id}: {e}")
+        print(f"[WARN] Error deleting token {token_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -942,11 +954,11 @@ if __name__ == '__main__':
     print("  GET    /analysis/<job_id>/csv      - Export results as CSV")
     print("-" * 70)
     if helius_enabled:
-        print("✓ Helius API enabled - Token analysis ready")
+        print("[OK] Helius API enabled - Token analysis ready")
     else:
-        print("⚠ Helius API disabled - Run: pip install requests solana base58")
+        print("[WARN] Helius API disabled - Run: pip install requests solana base58")
     print("-" * 70)
-    print("\n📊 Open http://localhost:5001 in your browser to access the dashboard")
+    print("\n>> Open http://localhost:5001 in your browser to access the dashboard")
     print("Press Ctrl+C to stop the server")
     print("=" * 70)
     print()
