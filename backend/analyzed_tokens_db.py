@@ -503,15 +503,15 @@ def delete_analyzed_token(token_id: int) -> bool:
 
 def search_tokens(query: str) -> List[Dict]:
     """
-    Search tokens by token address or wallet address.
-    Returns list of tokens that match the search.
+    Search tokens by token address, token name, symbol, acronym, or wallet address.
+    Returns list of tokens that match the search (case-insensitive).
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
         search_pattern = f'%{query}%'
 
-        # Search by token address or find tokens that have wallets matching the query
+        # Search by token fields or wallet address (case-insensitive with COLLATE NOCASE)
         cursor.execute('''
             SELECT DISTINCT
                 at.id, at.token_address, at.token_name, at.token_symbol, at.acronym,
@@ -519,10 +519,13 @@ def search_tokens(query: str) -> List[Dict]:
                 at.credits_used, at.last_analysis_credits
             FROM analyzed_tokens at
             LEFT JOIN early_buyer_wallets ebw ON at.id = ebw.token_id
-            WHERE at.token_address LIKE ?
-               OR ebw.wallet_address LIKE ?
+            WHERE at.token_address LIKE ? COLLATE NOCASE
+               OR at.token_name LIKE ? COLLATE NOCASE
+               OR at.token_symbol LIKE ? COLLATE NOCASE
+               OR at.acronym LIKE ? COLLATE NOCASE
+               OR ebw.wallet_address LIKE ? COLLATE NOCASE
             ORDER BY at.analysis_timestamp DESC
-        ''', (search_pattern, search_pattern))
+        ''', (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
 
         tokens = []
         for row in cursor.fetchall():
