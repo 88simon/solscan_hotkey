@@ -511,19 +511,22 @@ def search_tokens(query: str) -> List[Dict]:
 
         search_pattern = f'%{query}%'
 
-        # Search by token fields or wallet address (case-insensitive with COLLATE NOCASE)
+        # Search by token fields OR tokens that have matching wallets
         cursor.execute('''
             SELECT DISTINCT
                 at.id, at.token_address, at.token_name, at.token_symbol, at.acronym,
                 at.analysis_timestamp, at.first_buy_timestamp, at.wallets_found,
                 at.credits_used, at.last_analysis_credits
             FROM analyzed_tokens at
-            LEFT JOIN early_buyer_wallets ebw ON at.id = ebw.token_id
             WHERE at.token_address LIKE ? COLLATE NOCASE
                OR at.token_name LIKE ? COLLATE NOCASE
                OR at.token_symbol LIKE ? COLLATE NOCASE
                OR at.acronym LIKE ? COLLATE NOCASE
-               OR ebw.wallet_address LIKE ? COLLATE NOCASE
+               OR at.id IN (
+                   SELECT DISTINCT token_id
+                   FROM early_buyer_wallets
+                   WHERE wallet_address LIKE ? COLLATE NOCASE
+               )
             ORDER BY at.analysis_timestamp DESC
         ''', (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
 
