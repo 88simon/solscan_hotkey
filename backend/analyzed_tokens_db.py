@@ -115,6 +115,17 @@ def init_database():
             )
         ''')
 
+        # Wallet tags table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wallet_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wallet_address TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(wallet_address, tag)
+            )
+        ''')
+
         # Create indices for better query performance
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_token_address
@@ -129,6 +140,11 @@ def init_database():
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_activity_timestamp
             ON wallet_activity(timestamp DESC)
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_wallet_tags_address
+            ON wallet_tags(wallet_address)
         ''')
 
         # Run migrations to add new columns to existing tables
@@ -535,6 +551,148 @@ def search_tokens(query: str) -> List[Dict]:
             tokens.append(dict(row))
 
         return tokens
+
+
+def get_multi_token_wallets(min_tokens: int = 2) -> List[Dict]:
+    """
+    Find wallets that appear in multiple analyzed tokens.
+    Returns list of wallets with their token appearances.
+
+    Args:
+        min_tokens: Minimum number of tokens a wallet must appear in (default: 2)
+
+    Returns:
+        List of dicts with wallet_address, token_count, and list of tokens
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Find wallets that appear in multiple tokens
+        cursor.execute('''
+            SELECT
+                ebw.wallet_address,
+                COUNT(DISTINCT ebw.token_id) as token_count,
+                GROUP_CONCAT(DISTINCT at.token_name || ' (' || at.token_symbol || ')') as token_names,
+                GROUP_CONCAT(DISTINCT at.token_address) as token_addresses,
+                GROUP_CONCAT(DISTINCT ebw.token_id) as token_ids
+            FROM early_buyer_wallets ebw
+            JOIN analyzed_tokens at ON ebw.token_id = at.id
+            GROUP BY ebw.wallet_address
+            HAVING COUNT(DISTINCT ebw.token_id) >= ?
+            ORDER BY token_count DESC, ebw.wallet_address
+        ''', (min_tokens,))
+
+        wallets = []
+        for row in cursor.fetchall():
+            wallets.append({
+                'wallet_address': row[0],
+                'token_count': row[1],
+                'token_names': row[2].split(',') if row[2] else [],
+                'token_addresses': row[3].split(',') if row[3] else [],
+                'token_ids': [int(x) for x in row[4].split(',')] if row[4] else []
+            })
+
+        return wallets
+
+
+def add_wallet_tag(wallet_address: str, tag: str) -> bool:
+    """
+    Add a tag to a wallet address.
+
+    Args:
+        wallet_address: The wallet address to tag
+        tag: The tag to add
+
+    Returns:
+        True if tag was added, False if it already existed
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO wallet_tags (wallet_address, tag)
+                VALUES (?, ?)
+            ''', (wallet_address, tag))
+            return True
+        except sqlite3.IntegrityError:
+            # Tag already exists for this wallet
+            return False
+
+
+def remove_wallet_tag(wallet_address: str, tag: str) -> bool:
+    """
+    Remove a tag from a wallet address.
+
+    Args:
+        wallet_address: The wallet address
+        tag: The tag to remove
+
+    Returns:
+        True if tag was removed, False if it didn't exist
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM wallet_tags
+            WHERE wallet_address = ? AND tag = ?
+        ''', (wallet_address, tag))
+        return cursor.rowcount > 0
+
+
+def get_wallet_tags(wallet_address: str) -> List[str]:
+    """
+    Get all tags for a wallet address.
+
+    Args:
+        wallet_address: The wallet address
+
+    Returns:
+        List of tag strings
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT tag FROM wallet_tags
+            WHERE wallet_address = ?
+            ORDER BY created_at DESC
+        ''', (wallet_address,))
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_all_tags() -> List[str]:
+    """
+    Get all unique tags across all wallets.
+
+    Returns:
+        List of unique tag strings
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT tag FROM wallet_tags
+            ORDER BY tag
+        ''')
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_wallets_by_tag(tag: str) -> List[str]:
+    """
+    Get all wallet addresses with a specific tag.
+
+    Args:
+        tag: The tag to search for
+
+    Returns:
+        List of wallet addresses
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT wallet_address FROM wallet_tags
+            WHERE tag = ?
+            ORDER BY created_at DESC
+        ''', (tag,))
+        return [row[0] for row in cursor.fetchall()]
 
 
 # Initialize database on module import

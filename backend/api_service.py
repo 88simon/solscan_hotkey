@@ -657,6 +657,108 @@ def list_analyses():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/multi-token-wallets', methods=['GET'])
+def get_multi_token_wallets():
+    """
+    Get wallets that appear in multiple analyzed tokens.
+    Query parameter: min_tokens (default: 2)
+    """
+    try:
+        min_tokens = int(request.args.get('min_tokens', 2))
+        wallets = db.get_multi_token_wallets(min_tokens=min_tokens)
+
+        return jsonify({
+            'total': len(wallets),
+            'wallets': wallets
+        }), 200
+    except Exception as e:
+        log_error(f"Failed to get multi-token wallets: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/wallets/<wallet_address>/tags', methods=['GET', 'POST', 'DELETE'])
+def manage_wallet_tags(wallet_address):
+    """
+    Manage tags for a wallet address.
+    GET: Get all tags for a wallet
+    POST: Add a tag to a wallet (expects JSON: {"tag": "tagname"})
+    DELETE: Remove a tag from a wallet (expects JSON: {"tag": "tagname"})
+    """
+    try:
+        if request.method == 'GET':
+            tags = db.get_wallet_tags(wallet_address)
+            return jsonify({'wallet_address': wallet_address, 'tags': tags}), 200
+
+        elif request.method == 'POST':
+            data = request.get_json()
+            if not data or 'tag' not in data:
+                return jsonify({'error': 'Tag is required'}), 400
+
+            tag = data['tag'].strip()
+            if not tag:
+                return jsonify({'error': 'Tag cannot be empty'}), 400
+
+            added = db.add_wallet_tag(wallet_address, tag)
+            if added:
+                return jsonify({
+                    'message': 'Tag added successfully',
+                    'wallet_address': wallet_address,
+                    'tag': tag
+                }), 201
+            else:
+                return jsonify({
+                    'message': 'Tag already exists',
+                    'wallet_address': wallet_address,
+                    'tag': tag
+                }), 200
+
+        elif request.method == 'DELETE':
+            data = request.get_json()
+            if not data or 'tag' not in data:
+                return jsonify({'error': 'Tag is required'}), 400
+
+            tag = data['tag'].strip()
+            removed = db.remove_wallet_tag(wallet_address, tag)
+            if removed:
+                return jsonify({
+                    'message': 'Tag removed successfully',
+                    'wallet_address': wallet_address,
+                    'tag': tag
+                }), 200
+            else:
+                return jsonify({
+                    'message': 'Tag not found',
+                    'wallet_address': wallet_address,
+                    'tag': tag
+                }), 404
+
+    except Exception as e:
+        log_error(f"Failed to manage wallet tags: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/tags', methods=['GET'])
+def get_all_tags():
+    """Get all unique tags across all wallets"""
+    try:
+        tags = db.get_all_tags()
+        return jsonify({'tags': tags}), 200
+    except Exception as e:
+        log_error(f"Failed to get tags: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/tags/<tag>/wallets', methods=['GET'])
+def get_wallets_by_tag(tag):
+    """Get all wallets with a specific tag"""
+    try:
+        wallets = db.get_wallets_by_tag(tag)
+        return jsonify({'tag': tag, 'wallets': wallets}), 200
+    except Exception as e:
+        log_error(f"Failed to get wallets by tag: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # Webhook Management Endpoints
 # ============================================================================
