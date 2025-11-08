@@ -463,10 +463,17 @@
                             <div class="token-symbol">${token.token_symbol || '-'}</div>
                         </td>
                         <td class="address-cell">
-                            <a href="https://solscan.io/token/${token.token_address}" target="_blank"
-                               style="color: #667eea; text-decoration: none;">
-                                ${token.token_address.substring(0, 8)}...${token.token_address.substring(token.token_address.length - 6)}
-                            </a>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <a href="https://solscan.io/token/${token.token_address}" target="_blank"
+                                   style="color: #667eea; text-decoration: none;">
+                                    ${token.token_address.substring(0, 8)}...${token.token_address.substring(token.token_address.length - 6)}
+                                </a>
+                                <button onclick="copyAddress('${token.token_address}')"
+                                        style="padding: 4px 8px; font-size: 12px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;"
+                                        title="Copy address">
+                                    📋 Copy
+                                </button>
+                            </div>
                         </td>
                         <td style="white-space: nowrap;">
                             <button class="action-btn btn-primary" onclick="viewDetails(${token.id})">
