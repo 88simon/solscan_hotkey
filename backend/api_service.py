@@ -366,26 +366,12 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours):
             limit=10
         )
 
-        # ============================================================================
-        # SENSITIVE DATA: Save Axiom export to file
-        # ============================================================================
-        # WARNING: This file contains wallet addresses of early buyers you discovered.
-        # This data reveals your trading strategy and should NEVER be committed to Git.
-        # The axiom_exports/ directory is in .gitignore for your protection.
-        # ============================================================================
-        axiom_dir = 'axiom_exports'
-        os.makedirs(axiom_dir, exist_ok=True)
-        axiom_filename = f"{acronym}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
-        axiom_filepath = os.path.join(axiom_dir, axiom_filename)
-        with open(axiom_filepath, 'w') as f:
-            json.dump(axiom_export, f, indent=2)
-
         # Convert datetime objects to strings for JSON serialization
         for bidder in result.get('early_bidders', []):
             if 'first_buy_time' in bidder and hasattr(bidder['first_buy_time'], 'isoformat'):
                 bidder['first_buy_time'] = bidder['first_buy_time'].isoformat()
 
-        # Save to database
+        # Save to database first to get the token_id
         try:
             token_id = db.save_analyzed_token(
                 token_address=token_address,
@@ -400,17 +386,37 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours):
             print(f"[Job {job_id}] Saved to database (ID: {token_id})")
         except Exception as db_error:
             print(f"[Job {job_id}] Database save failed: {db_error}")
+            raise  # Re-raise to prevent file creation if database save fails
 
-        # Save result to file with token name
-        os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
-        # Sanitize token name for filename (replace spaces and special chars)
-        safe_token_name = token_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
-        # Remove any other problematic characters for filenames
-        safe_token_name = ''.join(c for c in safe_token_name if c.isalnum() or c in ('_', '-'))
-        result_filename = f"{safe_token_name}.json"
-        result_file = os.path.join(ANALYSIS_RESULTS_DIR, result_filename)
-        with open(result_file, 'w') as f:
+        # ============================================================================
+        # SENSITIVE DATA: Save files with ID-based naming
+        # ============================================================================
+        # WARNING: These files contain wallet addresses of early buyers you discovered.
+        # This data reveals your trading strategy and should NEVER be committed to Git.
+        # The analysis_results/ and axiom_exports/ directories are in .gitignore for your protection.
+        # ============================================================================
+
+        # Get file paths using database utility functions
+        analysis_filepath = db.get_analysis_file_path(token_id, token_name, in_trash=False)
+        axiom_filepath = db.get_axiom_file_path(token_id, acronym, in_trash=False)
+
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(analysis_filepath), exist_ok=True)
+        os.makedirs(os.path.dirname(axiom_filepath), exist_ok=True)
+
+        # Save analysis results file
+        with open(analysis_filepath, 'w') as f:
             json.dump(result, f, indent=2)
+
+        # Save Axiom export file
+        with open(axiom_filepath, 'w') as f:
+            json.dump(axiom_export, f, indent=2)
+
+        # Update database with file paths
+        db.update_token_file_paths(token_id, analysis_filepath, axiom_filepath)
+
+        # Store result filename for backwards compatibility
+        result_filename = os.path.basename(analysis_filepath)
 
         # Store the result filename in the job for later retrieval
         analysis_jobs[job_id]['result_file'] = result_filename
@@ -751,6 +757,17 @@ def get_wallets_by_tag(tag):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/codex', methods=['GET'])
+def get_codex():
+    """Get all wallets that have tags (Codex)"""
+    try:
+        wallets = db.get_all_tagged_wallets()
+        return jsonify({'wallets': wallets}), 200
+    except Exception as e:
+        log_error(f"Failed to get Codex: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # Webhook Management Endpoints
 # ============================================================================
@@ -1034,21 +1051,78 @@ def get_token_analysis_history(token_id):
 
 @app.route('/api/tokens/<int:token_id>', methods=['DELETE'])
 def delete_token_by_id(token_id):
-    """Delete an analyzed token and all associated data"""
+    """Soft delete an analyzed token (moves to trash)"""
     try:
-        success = db.delete_analyzed_token(token_id)
+        success = db.soft_delete_token(token_id)
 
         if not success:
             return jsonify({"error": "Token not found"}), 404
 
-        print(f"[OK] Deleted token ID {token_id} via API")
+        print(f"[OK] Soft deleted token ID {token_id} via API")
         return jsonify({
             "status": "success",
-            "message": f"Token {token_id} deleted successfully"
+            "message": f"Token {token_id} moved to trash"
         }), 200
 
     except Exception as e:
         print(f"[WARN] Error deleting token {token_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tokens/trash', methods=['GET'])
+def get_trash():
+    """Get all soft-deleted tokens (trash)"""
+    try:
+        tokens = db.get_deleted_tokens()
+        total = len(tokens)
+
+        return jsonify({
+            'tokens': tokens,
+            'total': total
+        }), 200
+
+    except Exception as e:
+        log_error(f"Failed to get trash: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tokens/<int:token_id>/restore', methods=['POST'])
+def restore_token_by_id(token_id):
+    """Restore a soft-deleted token from trash"""
+    try:
+        success = db.restore_token(token_id)
+
+        if not success:
+            return jsonify({"error": "Token not found in trash"}), 404
+
+        print(f"[OK] Restored token ID {token_id} via API")
+        return jsonify({
+            "status": "success",
+            "message": f"Token {token_id} restored successfully"
+        }), 200
+
+    except Exception as e:
+        print(f"[WARN] Error restoring token {token_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tokens/<int:token_id>/permanent', methods=['DELETE'])
+def permanent_delete_token_by_id(token_id):
+    """Permanently delete a token and all associated data (cannot be undone)"""
+    try:
+        success = db.permanent_delete_token(token_id)
+
+        if not success:
+            return jsonify({"error": "Token not found"}), 404
+
+        print(f"[OK] Permanently deleted token ID {token_id} via API")
+        return jsonify({
+            "status": "success",
+            "message": f"Token {token_id} permanently deleted"
+        }), 200
+
+    except Exception as e:
+        print(f"[WARN] Error permanently deleting token {token_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 

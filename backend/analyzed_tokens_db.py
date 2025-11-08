@@ -27,6 +27,230 @@ from contextlib import contextmanager
 # Use absolute path to ensure database is always in the backend directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_FILE = os.path.join(SCRIPT_DIR, 'analyzed_tokens.db')
+ANALYSIS_RESULTS_DIR = os.path.join(SCRIPT_DIR, 'analysis_results')
+AXIOM_EXPORTS_DIR = os.path.join(SCRIPT_DIR, 'axiom_exports')
+
+
+def sanitize_filename(text: str, max_length: int = 50) -> str:
+    """
+    Sanitize a string for use in filenames.
+
+    Args:
+        text: Text to sanitize
+        max_length: Maximum length of output
+
+    Returns:
+        Sanitized filename-safe string
+    """
+    # Convert to lowercase
+    text = text.lower()
+    # Replace spaces with hyphens
+    text = text.replace(' ', '-')
+    # Remove any character that isn't alphanumeric or hyphen
+    text = ''.join(c for c in text if c.isalnum() or c == '-')
+    # Remove consecutive hyphens
+    while '--' in text:
+        text = text.replace('--', '-')
+    # Trim hyphens from start/end
+    text = text.strip('-')
+    # Truncate to max length
+    if len(text) > max_length:
+        text = text[:max_length].rstrip('-')
+    return text
+
+
+def get_analysis_file_path(token_id: int, token_name: str, in_trash: bool = False) -> str:
+    """
+    Generate the file path for analysis results JSON.
+
+    Format: {id}_{sanitized-name}.json
+    Example: 20_eugene-the-meme.json
+    """
+    sanitized_name = sanitize_filename(token_name)
+    filename = f"{token_id}_{sanitized_name}.json"
+
+    if in_trash:
+        return os.path.join(ANALYSIS_RESULTS_DIR, 'trash', filename)
+    else:
+        return os.path.join(ANALYSIS_RESULTS_DIR, filename)
+
+
+def get_axiom_file_path(token_id: int, acronym: str, in_trash: bool = False) -> str:
+    """
+    Generate the file path for Axiom export JSON.
+
+    Format: {id}_{acronym}.json
+    Example: 20_em.json
+    """
+    sanitized_acronym = sanitize_filename(acronym, max_length=10)
+    filename = f"{token_id}_{sanitized_acronym}.json"
+
+    if in_trash:
+        return os.path.join(AXIOM_EXPORTS_DIR, 'trash', filename)
+    else:
+        return os.path.join(AXIOM_EXPORTS_DIR, filename)
+
+
+def move_files_to_trash(token_id: int):
+    """
+    Move token files to trash folders.
+
+    Returns:
+        Tuple of (analysis_moved, axiom_moved)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT analysis_file_path, axiom_file_path
+            FROM analyzed_tokens
+            WHERE id = ?
+        ''', (token_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return (False, False)
+
+        analysis_path, axiom_path = row[0], row[1]
+        analysis_moved = False
+        axiom_moved = False
+
+        # Create trash directories if they don't exist
+        os.makedirs(os.path.join(ANALYSIS_RESULTS_DIR, 'trash'), exist_ok=True)
+        os.makedirs(os.path.join(AXIOM_EXPORTS_DIR, 'trash'), exist_ok=True)
+
+        # Move analysis file
+        if analysis_path and os.path.exists(analysis_path):
+            trash_path = analysis_path.replace(ANALYSIS_RESULTS_DIR, os.path.join(ANALYSIS_RESULTS_DIR, 'trash'))
+            try:
+                os.rename(analysis_path, trash_path)
+                cursor.execute('UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?', (trash_path, token_id))
+                analysis_moved = True
+            except Exception as e:
+                print(f"[WARN] Failed to move analysis file: {e}")
+
+        # Move axiom file
+        if axiom_path and os.path.exists(axiom_path):
+            trash_path = axiom_path.replace(AXIOM_EXPORTS_DIR, os.path.join(AXIOM_EXPORTS_DIR, 'trash'))
+            try:
+                os.rename(axiom_path, trash_path)
+                cursor.execute('UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?', (trash_path, token_id))
+                axiom_moved = True
+            except Exception as e:
+                print(f"[WARN] Failed to move axiom file: {e}")
+
+        conn.commit()
+        return (analysis_moved, axiom_moved)
+
+
+def restore_files_from_trash(token_id: int):
+    """
+    Restore token files from trash folders.
+
+    Returns:
+        Tuple of (analysis_restored, axiom_restored)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT analysis_file_path, axiom_file_path
+            FROM analyzed_tokens
+            WHERE id = ?
+        ''', (token_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return (False, False)
+
+        analysis_path, axiom_path = row[0], row[1]
+        analysis_restored = False
+        axiom_restored = False
+
+        # Restore analysis file
+        if analysis_path and 'trash' in analysis_path and os.path.exists(analysis_path):
+            restored_path = analysis_path.replace(os.path.join(ANALYSIS_RESULTS_DIR, 'trash'), ANALYSIS_RESULTS_DIR)
+            try:
+                os.rename(analysis_path, restored_path)
+                cursor.execute('UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?', (restored_path, token_id))
+                analysis_restored = True
+            except Exception as e:
+                print(f"[WARN] Failed to restore analysis file: {e}")
+
+        # Restore axiom file
+        if axiom_path and 'trash' in axiom_path and os.path.exists(axiom_path):
+            restored_path = axiom_path.replace(os.path.join(AXIOM_EXPORTS_DIR, 'trash'), AXIOM_EXPORTS_DIR)
+            try:
+                os.rename(axiom_path, restored_path)
+                cursor.execute('UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?', (restored_path, token_id))
+                axiom_restored = True
+            except Exception as e:
+                print(f"[WARN] Failed to restore axiom file: {e}")
+
+        conn.commit()
+        return (analysis_restored, axiom_restored)
+
+
+def delete_token_files(token_id: int):
+    """
+    Permanently delete token files.
+
+    Returns:
+        Tuple of (analysis_deleted, axiom_deleted)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT analysis_file_path, axiom_file_path
+            FROM analyzed_tokens
+            WHERE id = ?
+        ''', (token_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return (False, False)
+
+        analysis_path, axiom_path = row[0], row[1]
+        analysis_deleted = False
+        axiom_deleted = False
+
+        # Delete analysis file
+        if analysis_path and os.path.exists(analysis_path):
+            try:
+                os.remove(analysis_path)
+                analysis_deleted = True
+            except Exception as e:
+                print(f"[WARN] Failed to delete analysis file: {e}")
+
+        # Delete axiom file
+        if axiom_path and os.path.exists(axiom_path):
+            try:
+                os.remove(axiom_path)
+                axiom_deleted = True
+            except Exception as e:
+                print(f"[WARN] Failed to delete axiom file: {e}")
+
+        return (analysis_deleted, axiom_deleted)
+
+
+def update_token_file_paths(token_id: int, analysis_path: str, axiom_path: str) -> bool:
+    """
+    Update the file paths for a token in the database.
+
+    Args:
+        token_id: ID of the token to update
+        analysis_path: Path to the analysis results file
+        axiom_path: Path to the axiom export file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE analyzed_tokens
+            SET analysis_file_path = ?, axiom_file_path = ?
+            WHERE id = ?
+        ''', (analysis_path, axiom_path, token_id))
+        return cursor.rowcount > 0
 
 
 @contextmanager
@@ -63,7 +287,11 @@ def init_database():
                 axiom_json TEXT,
                 webhook_id TEXT,
                 credits_used INTEGER DEFAULT 0,
-                last_analysis_credits INTEGER DEFAULT 0
+                last_analysis_credits INTEGER DEFAULT 0,
+                is_deleted BOOLEAN DEFAULT 0,
+                deleted_at TIMESTAMP,
+                analysis_file_path TEXT,
+                axiom_file_path TEXT
             )
         ''')
 
@@ -328,18 +556,32 @@ def save_analyzed_token(
         return token_id
 
 
-def get_analyzed_tokens(limit: int = 50) -> List[Dict]:
+def get_analyzed_tokens(limit: int = 50, include_deleted: bool = False) -> List[Dict]:
     """Get list of analyzed tokens, most recent first"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT
-                id, token_address, token_name, token_symbol, acronym,
-                analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits
-            FROM analyzed_tokens
-            ORDER BY analysis_timestamp DESC
-            LIMIT ?
-        ''', (limit,))
+
+        if include_deleted:
+            cursor.execute('''
+                SELECT
+                    id, token_address, token_name, token_symbol, acronym,
+                    analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
+                    is_deleted, deleted_at
+                FROM analyzed_tokens
+                ORDER BY analysis_timestamp DESC
+                LIMIT ?
+            ''', (limit,))
+        else:
+            cursor.execute('''
+                SELECT
+                    id, token_address, token_name, token_symbol, acronym,
+                    analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
+                    is_deleted, deleted_at
+                FROM analyzed_tokens
+                WHERE is_deleted = 0 OR is_deleted IS NULL
+                ORDER BY analysis_timestamp DESC
+                LIMIT ?
+            ''', (limit,))
 
         tokens = []
         for row in cursor.fetchall():
@@ -703,6 +945,133 @@ def get_wallets_by_tag(tag: str) -> List[str]:
             ORDER BY created_at DESC
         ''', (tag,))
         return [row[0] for row in cursor.fetchall()]
+
+
+def get_all_tagged_wallets() -> List[Dict]:
+    """
+    Get all wallets that have at least one tag (Codex).
+
+    Returns:
+        List of dictionaries with wallet_address and tags
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT wallet_address FROM wallet_tags
+            ORDER BY created_at DESC
+        ''')
+        wallets = []
+        for row in cursor.fetchall():
+            wallet_address = row[0]
+            tags = get_wallet_tags(wallet_address)
+            wallets.append({
+                'wallet_address': wallet_address,
+                'tags': tags
+            })
+        return wallets
+
+
+def soft_delete_token(token_id: int) -> bool:
+    """
+    Soft delete a token (mark as deleted and move files to trash).
+
+    Args:
+        token_id: ID of the token to soft delete
+
+    Returns:
+        True if successful, False otherwise
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE analyzed_tokens
+            SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (token_id,))
+        success = cursor.rowcount > 0
+
+        if success:
+            # Move files to trash
+            move_files_to_trash(token_id)
+
+        return success
+
+
+def restore_token(token_id: int) -> bool:
+    """
+    Restore a soft-deleted token (restore from trash).
+
+    Args:
+        token_id: ID of the token to restore
+
+    Returns:
+        True if successful, False otherwise
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE analyzed_tokens
+            SET is_deleted = 0, deleted_at = NULL
+            WHERE id = ?
+        ''', (token_id,))
+        success = cursor.rowcount > 0
+
+        if success:
+            # Restore files from trash
+            restore_files_from_trash(token_id)
+
+        return success
+
+
+def permanent_delete_token(token_id: int) -> bool:
+    """
+    Permanently delete a token and all its associated data.
+    This action cannot be undone.
+
+    Args:
+        token_id: ID of the token to permanently delete
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Delete files first (before database record is gone)
+    delete_token_files(token_id)
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Delete token (CASCADE will handle related records)
+        cursor.execute('DELETE FROM analyzed_tokens WHERE id = ?', (token_id,))
+        return cursor.rowcount > 0
+
+
+def get_deleted_tokens(limit: int = 50) -> List[Dict]:
+    """
+    Get list of soft-deleted tokens, most recently deleted first.
+
+    Args:
+        limit: Maximum number of tokens to return
+
+    Returns:
+        List of deleted token dictionaries
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                id, token_address, token_name, token_symbol, acronym,
+                analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
+                is_deleted, deleted_at
+            FROM analyzed_tokens
+            WHERE is_deleted = 1
+            ORDER BY deleted_at DESC
+            LIMIT ?
+        ''', (limit,))
+
+        tokens = []
+        for row in cursor.fetchall():
+            tokens.append(dict(row))
+
+        return tokens
 
 
 # Initialize database on module import
