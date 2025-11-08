@@ -1,13 +1,13 @@
 @echo off
 REM ============================================================================
-REM Gun Del Sol - Web Dashboard Only
+REM Gun Del Sol - Frontend Only
 REM ============================================================================
-REM Starts only the Next.js web dashboard on localhost:3000
-REM Useful for troubleshooting or when Flask API is already running
+REM Starts only the Next.js frontend on localhost:3000
+REM Useful for troubleshooting or when backend API is already running
 REM ============================================================================
 
 echo ============================================================================
-echo Gun Del Sol - Starting Next.js Web Dashboard...
+echo Gun Del Sol - Starting Frontend...
 echo ============================================================================
 echo.
 

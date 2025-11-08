@@ -307,7 +307,7 @@ global WheelMenuActions := [
 LoadSettings() {
     global WheelMenuHotkey, WheelMenuActions
 
-    settingsFile := A_ScriptDir . "\gun_del_sol_settings.ini"
+    settingsFile := A_ScriptDir . "\action_wheel_settings.ini"
 
     ; Load hotkey (default: backtick)
     WheelMenuHotkey := IniRead(settingsFile, "Hotkeys", "WheelMenu", "``")
@@ -322,7 +322,7 @@ LoadSettings() {
 SaveSettings() {
     global WheelMenuHotkey, WheelMenuActions
 
-    settingsFile := A_ScriptDir . "\gun_del_sol_settings.ini"
+    settingsFile := A_ScriptDir . "\action_wheel_settings.ini"
 
     ; Save hotkey
     IniWrite(WheelMenuHotkey, settingsFile, "Hotkeys", "WheelMenu")

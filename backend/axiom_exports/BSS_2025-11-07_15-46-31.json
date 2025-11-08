@@ -1,0 +1,14 @@
+[
+  {
+    "trackedWalletAddress": "A5m4kau62gth37NkQeSYGP1Hga4xvSMU3f7Cap3k9ruJ",
+    "name": "(1/10)$97|BSS",
+    "emoji": "#\ufe0f\u20e3",
+    "alertsOnToast": true,
+    "alertsOnBubble": true,
+    "alertsOnFeed": true,
+    "groups": [
+      "Main"
+    ],
+    "sound": "bing"
+  }
+]
