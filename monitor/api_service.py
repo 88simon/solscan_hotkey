@@ -958,8 +958,9 @@ if __name__ == '__main__':
     else:
         print("[WARN] Helius API disabled - Run: pip install requests solana base58")
     print("-" * 70)
-    print("\n>> Open http://localhost:5001 in your browser to access the dashboard")
-    print("Press Ctrl+C to stop the server")
+    print("\n>> Flask API:   http://localhost:5001")
+    print(">> Next.js Web: http://localhost:3000")
+    print("\nPress Ctrl+C to stop the server")
     print("=" * 70)
     print()
 

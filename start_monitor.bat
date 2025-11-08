@@ -1,11 +1,11 @@
 @echo off
 REM ============================================================================
-REM Gun Del Sol API Service Launcher
+REM Gun Del Sol - Monitor Service Launcher
 REM ============================================================================
 REM Starts the Flask REST API service that receives address registrations
 REM ============================================================================
 
-set SCRIPT_DIR=%~dp0
+set SCRIPT_DIR=%~dp0monitor\
 set PYTHON_SCRIPT=%SCRIPT_DIR%api_service.py
 
 REM Check if Python is installed
@@ -66,6 +66,8 @@ if %ERRORLEVEL% NEQ 0 (
 REM Start the API service
 echo.
 echo Starting Gun Del Sol API Service...
+echo Flask API: http://localhost:5001
+echo Next.js Web: http://localhost:3000
 echo.
 python "%PYTHON_SCRIPT%"
 
