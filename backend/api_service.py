@@ -671,7 +671,7 @@ def manage_wallet_tags(wallet_address):
     """
     Manage tags for a wallet address.
     GET: Get all tags for a wallet
-    POST: Add a tag to a wallet (expects JSON: {"tag": "tagname"})
+    POST: Add a tag to a wallet (expects JSON: {"tag": "tagname", "is_kol": boolean})
     DELETE: Remove a tag from a wallet (expects JSON: {"tag": "tagname"})
     """
     try:
@@ -688,12 +688,14 @@ def manage_wallet_tags(wallet_address):
             if not tag:
                 return jsonify({'error': 'Tag cannot be empty'}), 400
 
-            added = db.add_wallet_tag(wallet_address, tag)
+            is_kol = data.get('is_kol', False)
+            added = db.add_wallet_tag(wallet_address, tag, is_kol)
             if added:
                 return jsonify({
                     'message': 'Tag added successfully',
                     'wallet_address': wallet_address,
-                    'tag': tag
+                    'tag': tag,
+                    'is_kol': is_kol
                 }), 201
             else:
                 return jsonify({

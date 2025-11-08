@@ -121,6 +121,7 @@ def init_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 wallet_address TEXT NOT NULL,
                 tag TEXT NOT NULL,
+                is_kol BOOLEAN DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(wallet_address, tag)
             )
@@ -213,6 +214,14 @@ def init_database():
                     ''', (analysis_run_id, token_id))
 
             print("[Database] Migration complete: Existing wallets linked to analysis runs")
+
+        # Migration for is_kol column in wallet_tags
+        cursor.execute("PRAGMA table_info(wallet_tags)")
+        wt_columns = [col[1] for col in cursor.fetchall()]
+
+        if 'is_kol' not in wt_columns:
+            print("[Database] Migrating: Adding is_kol column to wallet_tags...")
+            cursor.execute('ALTER TABLE wallet_tags ADD COLUMN is_kol BOOLEAN DEFAULT 0')
 
         print("[Database] Schema initialized successfully")
 
@@ -595,13 +604,14 @@ def get_multi_token_wallets(min_tokens: int = 2) -> List[Dict]:
         return wallets
 
 
-def add_wallet_tag(wallet_address: str, tag: str) -> bool:
+def add_wallet_tag(wallet_address: str, tag: str, is_kol: bool = False) -> bool:
     """
     Add a tag to a wallet address.
 
     Args:
         wallet_address: The wallet address to tag
         tag: The tag to add
+        is_kol: Whether this is a KOL (Key Opinion Leader) tag
 
     Returns:
         True if tag was added, False if it already existed
@@ -610,9 +620,9 @@ def add_wallet_tag(wallet_address: str, tag: str) -> bool:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO wallet_tags (wallet_address, tag)
-                VALUES (?, ?)
-            ''', (wallet_address, tag))
+                INSERT INTO wallet_tags (wallet_address, tag, is_kol)
+                VALUES (?, ?, ?)
+            ''', (wallet_address, tag, 1 if is_kol else 0))
             return True
         except sqlite3.IntegrityError:
             # Tag already exists for this wallet
@@ -639,7 +649,7 @@ def remove_wallet_tag(wallet_address: str, tag: str) -> bool:
         return cursor.rowcount > 0
 
 
-def get_wallet_tags(wallet_address: str) -> List[str]:
+def get_wallet_tags(wallet_address: str) -> List[Dict]:
     """
     Get all tags for a wallet address.
 
@@ -647,16 +657,16 @@ def get_wallet_tags(wallet_address: str) -> List[str]:
         wallet_address: The wallet address
 
     Returns:
-        List of tag strings
+        List of tag dictionaries with 'tag' and 'is_kol' fields
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT tag FROM wallet_tags
+            SELECT tag, is_kol FROM wallet_tags
             WHERE wallet_address = ?
             ORDER BY created_at DESC
         ''', (wallet_address,))
-        return [row[0] for row in cursor.fetchall()]
+        return [{'tag': row[0], 'is_kol': bool(row[1])} for row in cursor.fetchall()]
 
 
 def get_all_tags() -> List[str]:
