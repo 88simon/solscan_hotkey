@@ -1,9 +1,11 @@
 @echo off
 title Gun Del Sol - Backend
 REM ============================================================================
-REM Gun Del Sol - Backend Service Launcher
+REM Gun Del Sol - Backend REST API Launcher
 REM ============================================================================
-REM Starts the Flask REST API service that receives address registrations
+REM Starts the Flask REST API service (pure JSON API, no HTML dashboard)
+REM Provides endpoints for token analysis, wallet tagging, and data management
+REM Use the Next.js frontend at localhost:3000 for the user interface
 REM ============================================================================
 
 set SCRIPT_DIR=%~dp0backend\
@@ -66,9 +68,13 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Start the API service
 echo.
-echo Starting Gun Del Sol Backend Service...
-echo Backend API: http://localhost:5001
-echo Frontend:    http://localhost:3000
+echo Starting Gun Del Sol REST API Service...
+echo.
+echo Backend REST API:  http://localhost:5001
+echo Frontend Dashboard: http://localhost:3000
+echo.
+echo NOTE: Backend is now a pure REST API (no HTML dashboard)
+echo       Use the Next.js frontend at localhost:3000 for the UI
 echo.
 python "%PYTHON_SCRIPT%"
 

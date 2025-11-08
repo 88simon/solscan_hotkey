@@ -10,7 +10,7 @@ Version: 1.0 (Phase 1 - MVP)
 ============================================================================
 """
 
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from datetime import datetime
 import json
@@ -575,16 +575,6 @@ def export_analysis_csv(job_id):
         return jsonify({"error": f"CSV export failed: {str(e)}"}), 500
 
 
-@app.route('/analysis/<job_id>/results', methods=['GET'])
-def view_analysis_results(job_id):
-    """View analysis results in HTML"""
-    if job_id not in analysis_jobs:
-        return "Job not found", 404
-
-    job = analysis_jobs[job_id]
-    return render_template('analysis_results.html', job=job)
-
-
 @app.route('/analysis/<job_id>/axiom', methods=['GET'])
 def download_axiom_export(job_id):
     """Download Axiom wallet tracker JSON"""
@@ -958,19 +948,25 @@ def webhook_callback():
 
 
 # ============================================================================
-# Dashboard Routes
+# Root Endpoint
 # ============================================================================
 
 @app.route('/')
-def dashboard():
-    """Serve web dashboard"""
-    return render_template('dashboard.html')
-
-
-@app.route('/tokens')
-def token_history():
-    """Serve token analysis history dashboard"""
-    return render_template('token_history.html')
+def root():
+    """API root endpoint with service information"""
+    return jsonify({
+        'status': 'ok',
+        'service': 'Gun Del Sol API',
+        'version': '1.0',
+        'message': 'REST API for Solana token analysis',
+        'endpoints': {
+            'health': '/health',
+            'tokens': '/api/tokens/history',
+            'analysis': '/analysis',
+            'tags': '/tags',
+            'multi_token_wallets': '/multi-token-wallets'
+        }
+    })
 
 
 # ============================================================================

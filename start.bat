@@ -5,8 +5,8 @@ REM Gun Del Sol - Master Launcher
 REM ============================================================================
 REM Starts all Gun Del Sol services:
 REM   1. AutoHotkey action wheel (action_wheel.ahk)
-REM   2. Flask backend API (localhost:5001)
-REM   3. Next.js frontend (localhost:3000)
+REM   2. Flask REST API backend (localhost:5001) - JSON API only
+REM   3. Next.js frontend dashboard (localhost:3000) - Main UI
 REM ============================================================================
 
 echo ============================================================================
@@ -48,9 +48,12 @@ echo ===========================================================================
 echo All services started!
 echo ============================================================================
 echo.
-echo Action Wheel: Running in background
-echo Backend API:  http://localhost:5001
-echo Frontend:     http://localhost:3000
+echo Action Wheel:       Running in background
+echo Backend REST API:   http://localhost:5001 ^(JSON API only^)
+echo Frontend Dashboard: http://localhost:3000 ^(Main UI^)
+echo.
+echo NOTE: Access the dashboard at http://localhost:3000
+echo       The backend is now a pure REST API with no HTML interface.
 echo.
 echo Close the individual windows to stop each service.
 echo ============================================================================
