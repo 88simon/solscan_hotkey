@@ -26,6 +26,7 @@ monitor/*.db
 
 # API keys and configuration
 monitor/config.json
+backend/config.json
 
 # Python cache and temp files
 monitor/__pycache__/

@@ -53,8 +53,9 @@ def load_api_key():
     if api_key:
         return api_key
 
-    # Try config.json
-    config_file = 'config.json'
+    # Try config.json (look in the backend directory where this script is located)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(script_dir, 'config.json')
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r') as f:
