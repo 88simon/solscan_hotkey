@@ -426,7 +426,7 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours):
         result['axiom_export'] = {
             'wallets': axiom_export,
             'file': axiom_filepath,
-            'filename': axiom_filename
+            'filename': os.path.basename(axiom_filepath)
         }
         result['acronym'] = acronym
 
