@@ -585,7 +585,22 @@ def get_analyzed_tokens(limit: int = 50, include_deleted: bool = False) -> List[
 
         tokens = []
         for row in cursor.fetchall():
-            tokens.append(dict(row))
+            token_dict = dict(row)
+
+            # Get wallet addresses for this token (from most recent analysis)
+            cursor.execute('''
+                SELECT DISTINCT ebw.wallet_address
+                FROM early_buyer_wallets ebw
+                JOIN analysis_runs ar ON ebw.analysis_run_id = ar.id
+                WHERE ebw.token_id = ?
+                ORDER BY ar.analysis_timestamp DESC
+                LIMIT 10
+            ''', (token_dict['id'],))
+
+            wallet_addresses = [row[0] for row in cursor.fetchall()]
+            token_dict['wallet_addresses'] = wallet_addresses
+
+            tokens.append(token_dict)
 
         return tokens
 
