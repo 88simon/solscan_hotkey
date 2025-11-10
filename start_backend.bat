@@ -87,6 +87,60 @@ if %ERRORLEVEL% NEQ 0 (
     )
 )
 
+REM Check if aiofiles is installed (async file I/O)
+python -c "import aiofiles" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo aiofiles is not installed. Installing...
+    echo.
+    python -m pip install aiofiles
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: Failed to install aiofiles
+        echo Please manually run: pip install aiofiles
+        echo.
+        pause
+        exit /b 1
+    ) else (
+        echo aiofiles installed successfully.
+    )
+)
+
+REM Check if httpx is installed (async HTTP client)
+python -c "import httpx" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo httpx is not installed. Installing...
+    echo.
+    python -m pip install httpx
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: Failed to install httpx
+        echo Please manually run: pip install httpx
+        echo.
+        pause
+        exit /b 1
+    ) else (
+        echo httpx installed successfully.
+    )
+)
+
+REM Check if aiosqlite is installed (async database)
+python -c "import aiosqlite" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo aiosqlite is not installed. Installing...
+    echo.
+    python -m pip install aiosqlite
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: Failed to install aiosqlite
+        echo Please manually run: pip install aiosqlite
+        echo.
+        pause
+        exit /b 1
+    ) else (
+        echo aiosqlite installed successfully.
+    )
+)
+
 REM Start the WebSocket server in background
 echo.
 echo Starting WebSocket notification server...
