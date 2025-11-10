@@ -8,6 +8,17 @@ REM Provides endpoints for token analysis, wallet tagging, and data management
 REM Use the Next.js frontend at localhost:3000 for the user interface
 REM ============================================================================
 
+REM Kill any existing backend services (idempotent startup)
+echo Checking for existing backend services...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5001') do (
+    taskkill /F /PID %%a >nul 2>nul
+)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5002') do (
+    taskkill /F /PID %%a >nul 2>nul
+)
+echo Cleaned up any existing services.
+echo.
+
 set SCRIPT_DIR=%~dp0backend\
 set PYTHON_SCRIPT=%SCRIPT_DIR%api_service.py
 
@@ -141,23 +152,49 @@ if %ERRORLEVEL% NEQ 0 (
     )
 )
 
+REM Check if orjson is installed (fast JSON serialization)
+python -c "import orjson" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo orjson is not installed. Installing...
+    echo.
+    python -m pip install orjson
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: Failed to install orjson
+        echo Please manually run: pip install orjson
+        echo.
+        pause
+        exit /b 1
+    ) else (
+        echo orjson installed successfully.
+    )
+)
+
 REM Start the WebSocket server in background
 echo.
 echo Starting WebSocket notification server...
-start "Gun Del Sol - WebSocket Server" /MIN python "%SCRIPT_DIR%websocket_server.py"
+start "Gun Del Sol - WebSocket Server" python "%SCRIPT_DIR%websocket_server.py"
 echo WebSocket server started on port 5002
+timeout /t 2 /nobreak >nul
+
+REM Start the FastAPI service in background (high-priority endpoints)
+echo.
+echo Starting FastAPI service (high-performance endpoints)...
+start "Gun Del Sol - FastAPI" python -m uvicorn fastapi_main:app --port 5003 --app-dir "%SCRIPT_DIR%"
+echo FastAPI server started on port 5003
 timeout /t 2 /nobreak >nul
 
 REM Start the Flask API service
 echo.
 echo Starting Gun Del Sol REST API Service...
 echo.
-echo Backend REST API:  http://localhost:5001
-echo WebSocket Server:  http://localhost:5002
+echo Flask API (legacy):  http://localhost:5001
+echo FastAPI (primary):  http://localhost:5003
+echo WebSocket Server:   http://localhost:5002
 echo Frontend Dashboard: http://localhost:3000
 echo.
-echo NOTE: Backend is now a pure REST API (no HTML dashboard)
-echo       Use the Next.js frontend at localhost:3000 for the UI
+echo NOTE: Frontend uses FastAPI (port 5003) for better performance
+echo       Flask API remains available for analysis jobs
 echo.
 python "%PYTHON_SCRIPT%"
 
