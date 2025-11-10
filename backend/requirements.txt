@@ -3,3 +3,5 @@ flask-cors>=5.0.0
 requests>=2.31.0
 solana>=0.30.0
 base58>=2.1.1
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0

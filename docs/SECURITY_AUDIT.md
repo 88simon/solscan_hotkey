@@ -1,320 +1,117 @@
-# OPSEC Security Fixes Required
+# OPSEC Security Audit
 
-## Status: CRITICAL - Immediate Action Required
+**Status:** Critical. Wallets, token addresses, and API keys can still leak through logs and unauthenticated routes if the backend is run with defaults.
 
-This document outlines all code changes needed to secure sensitive trading data from being leaked through logs, console output, and unsecured APIs.
+## Summary of Findings
 
----
+| Severity | Issue | Status |
+| --- | --- | --- |
+| Critical | Wallet and token addresses appear in `print()` statements inside `backend/api_service.py` and `backend/helius_api.py`. | Outstanding |
+| Critical | API endpoints allow anyone on the machine to mutate data without authentication. | Outstanding |
+| High | Browser `console.log` calls in dashboard templates echo sensitive payloads. | Outstanding |
+| Medium | Detailed error messages bubble up to API callers. | Outstanding |
 
-## Summary of Issues
+## Immediate Controls (10 minutes)
 
-| Severity | Issue | Count | Status |
-|----------|-------|-------|--------|
-| **CRITICAL** | Wallet addresses in print() statements | 50+ | ❌ NOT FIXED |
-| **CRITICAL** | Token addresses in print() statements | 30+ | ❌ NOT FIXED |
-| **CRITICAL** | Unauthenticated API endpoints | 10 | ❌ NOT FIXED |
-| **HIGH** | Full stack traces with file paths | 5 | ❌ NOT FIXED |
-| **HIGH** | Browser console.log with sensitive data | 18 | ❌ NOT FIXED |
-| **MEDIUM** | Webhook logs with wallet addresses | 3 | ❌ NOT FIXED |
-| **MEDIUM** | Temp files with wallet data | 2 | ❌ NOT FIXED |
+1. **Production logging switch**
+   - In both `backend/api_service.py` and `backend/helius_api.py`, wrap `print` with the helper from `secure_logging.py` or gate raw prints behind `DEBUG_LOGGING = False`.
+   - Verify `debug_config.py` defaults to `DEBUG_MODE = False`.
 
----
+2. **Disable browser logs**
+   - Near the top of each dashboard script block, add:
+     ```javascript
+     const DEBUG = false;
+     const originalLog = console.log;
+     console.log = (...args) => {
+         if (DEBUG) originalLog(...args);
+     };
+     ```
 
-## Quick Wins (Immediate Fixes)
+3. **Sanitize error responses**
+   - Replace `return jsonify({"error": str(e)}), 500` with `log_error(...)` plus `return jsonify({"error": "An error occurred"}), 500`.
 
-### 1. DISABLE DEBUG LOGGING (5 minutes)
+These changes stop accidental leaks while you apply the long-term fixes below.
 
-Add this at the top of `monitor_service.py` and `helius_api.py`:
+## Required Fixes
 
-```python
-# OPSEC: Set to False in production to prevent sensitive data leakage
-DEBUG_LOGGING = False
+### 1. Replace Sensitive Prints With Structured Logging
 
-def safe_log(message):
-    """Only log if DEBUG_LOGGING is True"""
-    if DEBUG_LOGGING:
-        print(message)
-```
+- Use the helpers from `secure_logging.py` everywhere:
+  - `log_address_registered`, `log_address_removed`
+  - `log_analysis_start`, `log_analysis_complete`
+  - `log_success`, `log_warning`, `log_error`
+- Never log full wallet addresses or mint addresses. If you need context, keep only the first 4 and last 4 characters.
 
-Then replace all `print()` statements that contain sensitive data with `safe_log()`.
+**Audit targets:**
+- `backend/api_service.py`: routes `/register`, `/remove`, `/analysis/*`, `/api/tokens/*`, webhook helpers.
+- `backend/helius_api.py`: token metadata fetch, transaction iterators, debug traces.
 
-### 2. REMOVE BROWSER CONSOLE LOGS (10 minutes)
+### 2. Add API Authentication
 
-In `token_history.html` lines 342-366, wrap all console.log in a conditional:
+1. Define a decorator in `backend/api_service.py`:
+   ```python
+   from functools import wraps
+   API_KEY = os.environ.get("GUN_API_KEY") or "CHANGE_ME"
 
-```javascript
-const DEBUG = false;  // Set to false in production
+   def require_api_key(func):
+       @wraps(func)
+       def wrapper(*args, **kwargs):
+           provided = request.headers.get("X-API-Key")
+           if provided != API_KEY:
+               return jsonify({"error": "Unauthorized"}), 401
+           return func(*args, **kwargs)
+       return wrapper
+   ```
+2. Apply it to every mutating route (`POST /register`, `/analysis`, `/import`, `/clear`, etc.).
+3. Store the secret in `backend/config.json` and surface it to the action wheel or frontend via environment variables.
 
-if (DEBUG) {
-    console.log('[TokenHistory] Data received:', data);
-}
-```
+### 3. Hide Stack Traces
 
-Or simply comment them all out:
-```javascript
-// console.log('[TokenHistory] Data received:', data);
-```
+- Wrap every route body with `try`/`except`.
+- Log `type(e).__name__` plus a sanitized message, return a generic response.
+- Ensure Werkzeug/Flask debug mode is off in production (`socketio.run(..., debug=False)`).
 
-### 3. SANITIZE ERROR RESPONSES (15 minutes)
+### 4. Browser Console Hygiene
 
-In `monitor_service.py`, change all error handlers from:
-```python
-except Exception as e:
-    return jsonify({"error": str(e)}), 500
-```
+- Remove or guard `console.log`/`console.table` calls inside `templates/` or frontend components that print wallet arrays.
+- Use a `DEBUG` flag tied to your `debug_config.get_debug_js_flag()` endpoint.
 
-To:
-```python
-except Exception as e:
-    log_error(f"Operation failed: {type(e).__name__}")  # Log internally
-    return jsonify({"error": "An error occurred"}), 500  # Generic response
-```
+### 5. Temp Files and Exports
 
----
+- Confirm all exports live under `backend/analysis_results/` or `backend/axiom_exports/`. Never write to `%TEMP%`.
+- Keep the folders git-ignored (already enforced) and periodically clear stale exports if you share screens.
 
-## Critical Fixes (Priority Order)
+## Configuration Hardening
 
-### FIX 1: Sanitize All Logging in monitor_service.py
+Create `backend/config.json` with explicit production flags:
 
-**Lines to change:**
-
-| Line | Current | Fix |
-|------|---------|-----|
-| 172 | `print(f"✓ Registered new address: {address}")` | `log_address_registered(address)` |
-| 212 | `print(f"✓ Removed address: {address}")` | `log_address_removed(address)` |
-| 244 | `print(f"✓ Updated note for address: {address}")` | `log_success("Address note updated")` |
-| 289 | `print(f"✓ Imported {added} addresses...")` | `log_success(f"Imported {added} addresses")` |
-| 326 | `print(f"[Job {job_id}] Starting analysis for {token_address}")` | `log_analysis_start(job_id)` |
-| 388 | `print(f"[Job {job_id}] Saved to database (ID: {token_id})")` | `log_success(f"Job {job_id} saved to database")` |
-| 411 | `print(f"[Job {job_id}] Analysis complete - found {result['total_unique_buyers']} early bidders")` | `log_analysis_complete(job_id, result['total_unique_buyers'])` |
-| 412 | `print(f"[Job {job_id}] Axiom export saved: {axiom_filepath}")` | `log_success(f"Job {job_id} export saved")` |
-| 417-418 | Full traceback logging | Remove or wrap in `if DEBUG_LOGGING:` |
-| 473 | `print(f"✓ Queued token analysis: {token_address} (Job ID: {job_id})")` | `log_success(f"Analysis queued (Job: {job_id})")` |
-| 654 | `print(f"[Webhook] Created webhook {webhook_id} for token ID {token_id}")` | `log_success(f"Webhook {webhook_id} created")` |
-| 785 | `print(f"[Webhook] Saved activity for wallet {wallet_address[:8]}...")` | `log_success("Webhook activity saved")` |
-
-### FIX 2: Sanitize helius_api.py Logging
-
-**Critical lines exposing token addresses:**
-
-| Line | Current | Fix |
-|------|---------|-----|
-| 77 | `print(f"Error fetching token metadata (standard): {str(e)}")` | `log_error("Token metadata fetch failed (trying DAS)")` |
-| 107 | `print(f"Error fetching token metadata (DAS): {str(das_error)}")` | `log_error("DAS API metadata fetch failed")` |
-| 316 | `print(f"[Helius] Analyzing token: {mint_address}")` | `log_info("Token analysis started")` |
-| 322 | `print(f"[Helius] Token info: {token_name}")` | `log_info("Token metadata retrieved")` |
-| 427 | `print(f"[Helius] Found {len(early_bidders)} early bidders...")` | `log_success(f"Found {len(early_bidders)} early buyers")` |
-
-**Debug logging (lines 454-518):**
-Wrap entire debug section in:
-```python
-DEBUG_TRANSACTIONS = False  # Set to True only when debugging locally
-
-if DEBUG_TRANSACTIONS and debug_first:
-    # ... all debug print statements ...
-```
-
-### FIX 3: Add API Authentication
-
-Add to `monitor_service.py` after imports:
-
-```python
-from functools import wraps
-
-# Generate a random API key on first run (save to config.json)
-API_KEY = os.environ.get('API_KEY') or 'CHANGE_ME_IN_PRODUCTION'
-
-def require_api_key(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        provided_key = request.headers.get('X-API-Key')
-        if not provided_key or provided_key != API_KEY:
-            return jsonify({"error": "Unauthorized"}), 401
-        return f(*args, **kwargs)
-    return decorated_function
-```
-
-Then protect sensitive endpoints:
-```python
-@app.route('/api/tokens/history', methods=['GET'])
-@require_api_key  # ADD THIS
-def get_token_history():
-    # ... existing code ...
-```
-
-Protect these endpoints:
-- `/addresses`
-- `/address/<address>`
-- `/analysis`
-- `/analysis/<job_id>`
-- `/api/tokens/history`
-- `/api/tokens/<token_id>`
-
-### FIX 4: Remove Browser Console Logs
-
-**token_history.html:**
-```javascript
-// Lines 342-366: Comment out or wrap in DEBUG flag
-const DEBUG = false;
-
-// Replace all console.log with:
-if (DEBUG) console.log('[TokenHistory] ...', data);
-```
-
-**defined-fi-autosearch.user.js:**
-```javascript
-// Lines 16, 21, 27, 38, 49, 70, 76, 89, 93, 104, 108, 122:
-// Comment out all console.log statements or wrap in DEBUG flag
-const DEBUG = false;
-if (DEBUG) console.log('[Defined.fi Auto-Search] ...', address);
-```
-
-### FIX 5: Replace AHK Temp Files
-
-**gun_del_sol.ahk lines 1225-1249 and 1335-1362:**
-
-Instead of:
-```ahk
-tempFile := A_Temp . "\solscan_register.json"
-FileAppend jsonData, tempFile
-RunWait curl ... @tempFile, , Hide
-FileDelete tempFile
-```
-
-Use:
-```ahk
-; Pass JSON directly via stdin
-RunWait curl -X POST http://localhost:5001/register -H "Content-Type: application/json" --data-raw "`" jsonData `"`, , Hide
-```
-
-This eliminates temp files entirely.
-
----
-
-## Configuration Changes
-
-### Enable/Disable Logging
-
-Create `monitor/config.json`:
 ```json
 {
-    "helius_api_key": "your-key-here",
-    "api_key": "generate-random-key-here",
-    "debug_logging": false,
-    "debug_transactions": false
+  "helius_api_key": "REPLACE_ME",
+  "api_key": "GENERATE_A_RANDOM_VALUE",
+  "debug_logging": false,
+  "debug_transactions": false
 }
 ```
 
-### .gitignore Check ✓
+Load these settings inside `api_service.py` and `helius_api.py` before initializing logging.
 
-Already protected:
-- ✓ `monitor/axiom_exports/`
-- ✓ `monitor/analysis_results/`
-- ✓ `monitor/*.db`
-- ✓ `monitor/config.json`
-- ✓ `monitor/monitored_addresses.json`
+## Verification Checklist
 
----
-
-## Testing After Fixes
-
-1. **Restart service** and run token analysis
-2. **Check terminal output** - should see NO wallet/token addresses
-3. **Check browser console** - should see NO sensitive data
-4. **Try API without auth** - should get 401 Unauthorized
-5. **Check Windows temp folder** - should have NO JSON files
-
----
-
-## Enforcement Checklist
-
-Before committing ANY code:
-- [ ] Search for `print(.*address)` - should find ZERO matches
-- [ ] Search for `print(.*token)` - should find ZERO matches
-- [ ] Search for `console.log.*address` - should find ZERO matches
-- [ ] All sensitive endpoints have `@require_api_key` decorator
-- [ ] No temp files created with sensitive data
-- [ ] `DEBUG_LOGGING = False` in production code
-- [ ] All error messages are generic
-
----
+- [ ] `rg -n "print\(.*address"` returns no matches outside of gated debug blocks.
+- [ ] No route returns stack traces or mentions filesystem paths.
+- [ ] Every mutating route returns 401 when `X-API-Key` is missing.
+- [ ] Browser console stays empty while running through a workflow.
+- [ ] `backend/analysis_results/` and `backend/axiom_exports/` never leave the machine.
 
 ## Emergency Procedure
 
-If you've already leaked data in logs:
-
-1. **Delete log files** immediately
-2. **Clear browser console** (close/reopen browser)
-3. **Rotate API keys** if exposed
-4. **Check Windows temp folder** and delete any JSON files
-5. **Review screen recording/sharing** history
-6. **Consider wallet addresses compromised** - adjust strategy accordingly
+If you suspect data already leaked:
+1. Delete all log files.
+2. Rotate API keys immediately.
+3. Treat any exposed wallet addresses as compromised and adjust your trading strategy.
+4. Re-clone a clean repo once secrets are rotated.
 
 ---
 
-## Long-term Solutions
-
-### Production Mode Flag
-
-Add to `monitor_service.py`:
-```python
-PRODUCTION_MODE = os.environ.get('PRODUCTION', 'true').lower() == 'true'
-
-if PRODUCTION_MODE:
-    # Disable all logging of sensitive data
-    # Require API authentication
-    # Sanitize all error messages
-```
-
-### Structured Logging
-
-Replace `print()` with Python's `logging` module:
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO if PRODUCTION_MODE else logging.DEBUG)
-```
-
-### Database Encryption
-
-Consider encrypting the SQLite database using `sqlcipher`:
-```bash
-pip install pysqlcipher3
-```
-
----
-
-## Responsible Disclosure
-
-**DO NOT**:
-- Share logs publicly
-- Post screenshots with addresses visible
-- Stream/record with terminal open
-- Send unencrypted exports via email
-
-**DO**:
-- Keep terminal minimized when screen sharing
-- Use secure encrypted channels for backups
-- Regularly audit logs for leaks
-- Clear browser console before demos
-
----
-
-## Status: NOT PRODUCTION READY
-
-**Current State**: ❌ UNSAFE - Actively leaking sensitive data through logs and console
-
-**Required Before Production**:
-1. Implement all FIX 1-5 changes above
-2. Test thoroughly
-3. Enable API authentication
-4. Set `DEBUG_LOGGING = False`
-5. Review all print/console.log statements
-
-**Estimated Time to Secure**: 2-3 hours of focused work
-
----
-
-**Last Updated**: 2025-11-05
-**Next Review**: After implementing fixes
+Re-run this audit whenever you touch logging, add new routes, or change deployment targets. Nothing leaves the local box unless you explicitly paste it somewhere—keep it that way.

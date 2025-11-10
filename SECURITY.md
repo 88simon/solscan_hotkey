@@ -1,85 +1,42 @@
 # Security and Data Privacy Notice
 
-## ⚠️ SENSITIVE DATA - DO NOT SHARE ⚠️
+This repository contains research data, private watchlists, and API credentials. Keep every sensitive artifact on your local machine and out of version control.
 
-This directory contains **highly sensitive trading data** that should NEVER be committed to version control or shared publicly.
+## High-Risk Paths (Do Not Share)
 
-### Protected Files and Directories
+| Path | Contains | Risk | Protection |
+| --- | --- | --- | --- |
+| `backend/axiom_exports/` | Buyer export bundles | Reveals trading playbooks | git-ignored |
+| `backend/analysis_results/` | Raw job output, CSV/JSON | Full transaction research set | git-ignored |
+| `backend/analyzed_tokens.db` and `backend/solscan_monitor.db` | Token + wallet history | Complete trading history | git-ignored |
+| `backend/monitored_addresses.json` | Current watchlist | Leaks addresses of interest | git-ignored |
+| `backend/config.json` | Helius API key + thresholds | API key theft and quota drain | git-ignored |
 
-The following contain your private trading research and strategies:
+Never push these files, zip them for others, or upload them to cloud storage without encryption.
 
-#### 1. `axiom_exports/` directory
-- **Contains**: Wallet addresses of early buyers you discovered
-- **Risk**: Reveals your exact trading strategy and targets
-- **Protection**: Added to `.gitignore`
+## Safe Sharing
 
-#### 2. `analysis_results/` directory
-- **Contains**: Full token analysis results with transaction data
-- **Risk**: Exposes your research methodology and findings
-- **Protection**: Added to `.gitignore`
-
-#### 3. `solscan_monitor.db` (SQLite database)
-- **Contains**:
-  - All analyzed tokens
-  - Early buyer wallet addresses
-  - Transaction timestamps and amounts
-  - Your complete trading history
-- **Risk**: Complete exposure of your trading activity
-- **Protection**: Added to `.gitignore` (all `.db` files)
-
-#### 4. `monitored_addresses.json`
-- **Contains**: Wallet addresses you're actively monitoring
-- **Risk**: Reveals addresses of interest
-- **Protection**: Added to `.gitignore`
-
-#### 5. `config.json` (Gun Del Sol settings)
-- **Contains**: Your Helius API key
-- **Risk**: API key theft and unauthorized usage
-- **Protection**: Added to `.gitignore`
-
----
+You can safely share:
+- AutoHotkey sources (`action_wheel.ahk`, helpers under `Lib/`)
+- Backend source files (`backend/*.py`, excluding configs with secrets)
+- Documentation (`README.md`, files under `docs/`)
+- Configuration templates (`backend/config.example.json`)
+- Browser helpers (`userscripts/`)
 
 ## Best Practices
 
-### ✅ DO:
-- Keep these files on your local machine only
-- Back up to encrypted external drives
-- Use strong passwords for any backups
-- Regularly review `.gitignore` to ensure protection
+- Keep sensitive folders on encrypted disks or password-protected backups.
+- Review `.gitignore` before adding new artifacts under `backend/`.
+- Rotate API keys immediately if logs or screen recordings capture them.
+- Clear browser consoles and terminal buffers before streaming or screenshotting.
 
-### ❌ DON'T:
-- Commit these files to Git
-- Share analysis results publicly
-- Upload to cloud storage (Dropbox, Google Drive, etc.)
-- Send unencrypted via email
-- Post wallet addresses on social media or forums
+## If You Leak Data
 
----
+1. Revoke exposed API keys.
+2. Treat any revealed wallet addresses as compromised.
+3. Use `git filter-repo` or BFG Repo-Cleaner to purge the files from history.
+4. Re-clone a clean working tree once remediation is complete.
 
-## What's Safe to Share
+## Questions
 
-You CAN safely share:
-- The Python source code (`.py` files)
-- The AutoHotkey script (`.ahk` file)
-- HTML templates (without data)
-- Documentation and README files
-- Configuration templates (without real API keys)
-
----
-
-## If Data is Accidentally Committed
-
-If you accidentally commit sensitive data to Git:
-
-1. **DO NOT** just delete the file - it remains in Git history
-2. Use `git filter-branch` or BFG Repo-Cleaner to remove it from history
-3. Immediately revoke and regenerate any exposed API keys
-4. Consider the wallet addresses potentially compromised
-
----
-
-## Questions?
-
-Remember: **When in doubt, don't share it.**
-
-Your trading edge depends on keeping this data private.
+When in doubt, do not share it. Keeping your datasets private is the only way to protect the edge that Gun Del Sol gives you.

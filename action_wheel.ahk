@@ -1381,7 +1381,11 @@ AnalyzeTokenWithService(tokenAddress) {
         result := RunWait('cmd /c ' . command, , "Hide")
 
         if (result = 0) {
-            ShowNotification("Analysis queued", "Check dashboard for results")
+            ; Show Windows notification for analysis started
+            ShowNotification("Analysis Started", "Analyzing token: " . SubStr(tokenAddress, 1, 8) . "...")
+            ; Also show a tooltip that persists for 3 seconds
+            ToolTip "Token Analysis Running`nAddress: " . SubStr(tokenAddress, 1, 12) . "...`nCheck dashboard for results"
+            SetTimer () => ToolTip(), -3000
         } else {
             ShowNotification("Analysis service offline", "Start monitor service first")
         }
@@ -1400,6 +1404,9 @@ AnalyzeTokenWithService(tokenAddress) {
 ; ============================================================================
 
 ShowNotification(title, message) {
+    ; Show Windows notification
+    TrayTip title, message, "Iconi Mute"
+    ; Also show tooltip for redundancy
     ToolTip title . "`n" . message
     SetTimer () => ToolTip(), -NOTIFICATION_DURATION
 }

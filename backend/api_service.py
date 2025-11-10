@@ -20,6 +20,7 @@ import uuid
 from threading import Thread
 import csv
 import io
+import requests
 from secure_logging import (
     log_info, log_success, log_warning, log_error,
     log_analysis_start, log_analysis_complete, log_token_save,
@@ -37,6 +38,9 @@ from debug_config import is_debug_enabled
 app = Flask(__name__)
 # Enable CORS for Next.js frontend on localhost:3000
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+# FastAPI WebSocket server URL
+WEBSOCKET_SERVER_URL = "http://localhost:5002"
 
 # Configuration
 DATA_FILE = "monitored_addresses.json"
@@ -332,12 +336,14 @@ def clear_all():
 # Token Analysis Endpoints
 # ============================================================================
 
-def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_transactions=500, max_credits=1000):
+def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_transactions=500, max_credits=1000, max_wallets=10):
     """Background worker function to analyze a token"""
     try:
+        # OPSEC: Only show first/last 4 chars of token address
+        token_display = f"{token_address[:4]}...{token_address[-4:]}" if len(token_address) >= 12 else "****"
         print(f"[Job {job_id}] === ANALYSIS STARTED (NEW CODE v8 - CREDIT LIMITING) ===")
-        print(f"[Job {job_id}] Starting analysis for {token_address}")
-        print(f"[Job {job_id}] Settings: min_usd=${min_usd}, time_window={time_window_hours}h, max_transactions={max_transactions}, max_credits={max_credits}")
+        print(f"[Job {job_id}] Starting analysis for {token_display}")
+        print(f"[Job {job_id}] Settings: min_usd=${min_usd}, time_window={time_window_hours}h, max_transactions={max_transactions}, max_credits={max_credits}, max_wallets={max_wallets}")
         analysis_jobs[job_id]['status'] = 'processing'
 
         analyzer = TokenAnalyzer(HELIUS_API_KEY)
@@ -346,7 +352,8 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_tr
             min_usd=min_usd,
             time_window_hours=time_window_hours,
             max_transactions=max_transactions,
-            max_credits=max_credits
+            max_credits=max_credits,
+            max_wallets_to_store=max_wallets
         )
 
         # Extract token info with proper null handling
@@ -367,7 +374,7 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_tr
             early_bidders=result.get('early_bidders', []),
             token_name=token_name,
             token_symbol=token_symbol,
-            limit=10
+            limit=max_wallets
         )
 
         # Convert datetime objects to strings for JSON serialization
@@ -385,7 +392,8 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_tr
                 early_bidders=result.get('early_bidders', []),
                 axiom_json=axiom_export,
                 first_buy_timestamp=result.get('first_transaction_time'),
-                credits_used=result.get('api_credits_used', 0)
+                credits_used=result.get('api_credits_used', 0),
+                max_wallets=max_wallets
             )
             print(f"[Job {job_id}] Saved to database (ID: {token_id})")
         except Exception as db_error:
@@ -440,6 +448,28 @@ def run_token_analysis(job_id, token_address, min_usd, time_window_hours, max_tr
 
         print(f"[Job {job_id}] Analysis complete - found {result['total_unique_buyers']} early bidders")
         print(f"[Job {job_id}] Axiom export saved: {axiom_filepath}")
+
+        # Send notification to FastAPI WebSocket server
+        try:
+            notification_payload = {
+                'job_id': job_id,
+                'token_name': token_name,
+                'token_symbol': token_symbol,
+                'acronym': acronym,
+                'wallets_found': len(result.get('early_bidders', [])),
+                'token_id': token_id
+            }
+            response = requests.post(
+                f"{WEBSOCKET_SERVER_URL}/notify/analysis_complete",
+                json=notification_payload,
+                timeout=2
+            )
+            if response.status_code == 200:
+                print(f"[WebSocket] Sent completion notification for {acronym} to {response.json()['connections']} clients")
+            else:
+                print(f"[WebSocket] Failed to send notification: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"[WebSocket] Could not reach WebSocket server: {e}")
 
     except Exception as e:
         import traceback
@@ -518,11 +548,13 @@ def analyze_token():
         }
 
         # Start background analysis
-        thread = Thread(target=run_token_analysis, args=(job_id, token_address, min_usd, time_window_hours, transaction_limit, max_credits))
+        thread = Thread(target=run_token_analysis, args=(job_id, token_address, min_usd, time_window_hours, transaction_limit, max_credits, max_wallets))
         thread.daemon = True
         thread.start()
 
-        print(f"[OK] Queued token analysis: {token_address} (Job ID: {job_id})")
+        # OPSEC: Only show first/last 4 chars of token address
+        token_display = f"{token_address[:4]}...{token_address[-4:]}" if len(token_address) >= 12 else "****"
+        print(f"[OK] Queued token analysis: {token_display} (Job ID: {job_id})")
         print(f"[OK] Settings: ${min_usd} min, {transaction_limit} transactions, {max_wallets} wallets max")
 
         return jsonify({
@@ -1320,6 +1352,7 @@ if __name__ == '__main__':
     print("-" * 70)
     print("\n>> Flask API:   http://localhost:5001")
     print(">> Next.js Web: http://localhost:3000")
+    print(">> WebSocket:   http://localhost:5002 (Start websocket_server.py separately)")
     print("\nPress Ctrl+C to stop the server")
     print("=" * 70)
     print()

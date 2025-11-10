@@ -23,11 +23,15 @@ monitor/axiom_exports/
 # SQLite database (contains all analyzed tokens and wallet data)
 monitor/solscan_monitor.db
 monitor/*.db
+backend/*.db
+*.db
+*_backup_*.db
 
 # API keys and configuration
 monitor/config.json
 backend/config.json
 backend/api_settings.json
+backend/monitored_addresses.json
 
 # Python cache and temp files
 monitor/__pycache__/

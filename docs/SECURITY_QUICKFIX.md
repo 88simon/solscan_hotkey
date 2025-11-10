@@ -1,86 +1,76 @@
-# Quick OPSEC Fixes - Apply Immediately
+# Quick OPSEC Fixes
 
-Due to the extensive number of logging statements to fix (131+), here's the **fastest** way to secure your code:
+Need a safe build in under ten minutes? Apply the controls below before sharing screens, collecting logs, or letting anyone else touch the backend.
 
-## IMMEDIATE FIX (5 Minutes) - Production Mode
+## 1. Disable Verbose Logging
 
-Add these lines at the TOP of both `monitor_service.py` and `helius_api.py`:
+Add the production guard near the top of **both** `backend/api_service.py` and `backend/helius_api.py`:
 
 ```python
-# ============================================================================
-# OPSEC: PRODUCTION MODE - Disable Sensitive Logging
-# ============================================================================
-# Set to False to prevent wallet/token addresses from appearing in logs
-DEBUG_LOGGING = False  # CHANGE TO True ONLY when debugging locally
+from secure_logging import log_error, log_info, log_success, log_warning
+
+DEBUG_LOGGING = False  # flip to True only when debugging locally
 
 def safe_print(*args, **kwargs):
-    """Only print if DEBUG_LOGGING is enabled"""
     if DEBUG_LOGGING:
         print(*args, **kwargs)
 
-# Replace built-in print with safe version
 print = safe_print
-# ============================================================================
 ```
 
-**That's it!** This single change will disable ALL logging instantly.
+Replace any remaining raw `print()` calls that output wallet or token data with the structured helpers so they honor the flag.
 
----
+## 2. Silence Browser Consoles
 
-## Browser Console Fix (2 Minutes)
-
-In `token_history.html` line 337, add at the top of the `<script>` section:
+Drop this snippet at the top of each dashboard script bundle (or Next.js layout):
 
 ```javascript
-// OPSEC: Disable console logging in production
 const DEBUG = false;
 const originalLog = console.log;
-console.log = function(...args) {
-    if (DEBUG) originalLog.apply(console, args);
+console.log = (...args) => {
+    if (DEBUG) {
+        originalLog(...args);
+    }
 };
 ```
 
----
+Toggle `DEBUG` only when capturing traces on an air-gapped machine.
 
-## Test
+## 3. Generic API Errors
 
-1. Restart the monitor service
-2. Run a token analysis
-3. **Check terminal** - should see NO wallet/token addresses
-4. **Check browser console** - should see NO sensitive data
+Wrap every route in `backend/api_service.py` with a `try`/`except` that returns:
 
----
-
-## To Re-Enable for Debugging
-
-Change:
 ```python
-DEBUG_LOGGING = True  # In Python files
+except Exception as exc:
+    log_error(f"Route failed: {type(exc).__name__}")
+    return jsonify({"error": "An error occurred"}), 500
 ```
 
-```javascript
-const DEBUG = true;  // In HTML files
+This stops stack traces and file paths from reaching API clients.
+
+## 4. Minimum Authentication
+
+Even on localhost, lock down mutating routes with a single API key:
+
+```python
+API_KEY = os.environ.get("GUN_API_KEY") or "CHANGE_ME"
+
+def require_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if request.headers.get("X-API-Key") != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        return func(*args, **kwargs)
+    return wrapper
 ```
 
----
+Add `@require_api_key` to `/register`, `/analysis`, `/import`, `/clear`, and `/api/settings`.
 
-## Permanent Solution (Later)
+## 5. Test Before Use
 
-When you have more time, follow the detailed fixes in [SECURITY_AUDIT.md](SECURITY_AUDIT.md) to:
-- Replace all print() with proper secure_logging functions
-- Add API authentication
-- Sanitize error messages
+1. Restart the backend (`start_backend.bat`).
+2. Register a wallet and launch an analysis job.
+3. Confirm the console shows only sanitized log lines and the browser console stays empty.
+4. Hit a protected route without `X-API-Key` and expect `401 Unauthorized`.
 
-But for NOW, the above quick fix makes your system **production-safe immediately**.
-
----
-
-## Status After Quick Fix
-
-✅ Wallet addresses - PROTECTED (not logged)
-✅ Token addresses - PROTECTED (not logged)
-✅ Transaction data - PROTECTED (not logged)
-❌ API Authentication - Still needed (lower priority)
-❌ Error sanitization - Still needed (lower priority)
-
-**You're now 80% more secure with just 7 minutes of work!**
+These steps do not replace the full audit in `SECURITY_AUDIT.md`, but they dramatically reduce accidental leakage while you work through the deeper fixes.

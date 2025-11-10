@@ -66,11 +66,40 @@ if %ERRORLEVEL% NEQ 0 (
     )
 )
 
-REM Start the API service
+REM Check if FastAPI is installed
+python -c "import fastapi" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo FastAPI is not installed. Installing dependencies...
+    echo.
+    python -m pip install fastapi uvicorn[standard]
+    echo.
+    REM Check if FastAPI installed successfully (ignore pip warnings)
+    python -c "import fastapi" 2>nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo ERROR: Failed to install FastAPI
+        echo Please manually run: pip install fastapi uvicorn[standard]
+        echo.
+        pause
+        exit /b 1
+    ) else (
+        echo FastAPI installed successfully.
+    )
+)
+
+REM Start the WebSocket server in background
+echo.
+echo Starting WebSocket notification server...
+start "Gun Del Sol - WebSocket Server" /MIN python "%SCRIPT_DIR%websocket_server.py"
+echo WebSocket server started on port 5002
+timeout /t 2 /nobreak >nul
+
+REM Start the Flask API service
 echo.
 echo Starting Gun Del Sol REST API Service...
 echo.
 echo Backend REST API:  http://localhost:5001
+echo WebSocket Server:  http://localhost:5002
 echo Frontend Dashboard: http://localhost:3000
 echo.
 echo NOTE: Backend is now a pure REST API (no HTML dashboard)

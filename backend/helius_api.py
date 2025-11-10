@@ -617,7 +617,8 @@ class HeliusAPI:
         min_usd: float = 50.0,
         time_window_hours: int = 999999,
         max_transactions: int = 500,
-        max_credits: int = 1000
+        max_credits: int = 1000,
+        max_wallets_to_store: int = 10
     ) -> Dict:
         """
         Analyze a token to find early bidders.
@@ -1008,7 +1009,8 @@ class TokenAnalyzer:
         min_usd: float = 50.0,
         time_window_hours: int = 999999,
         max_transactions: int = 500,
-        max_credits: int = 1000
+        max_credits: int = 1000,
+        max_wallets_to_store: int = 10
     ) -> Dict:
         """
         Analyze a token to find early bidders.
@@ -1019,6 +1021,7 @@ class TokenAnalyzer:
             time_window_hours: Analysis window in hours (default: 999999, effectively unlimited)
             max_transactions: Maximum transactions to analyze (default: 500)
             max_credits: Maximum API credits to spend (default: 1000)
+            max_wallets_to_store: Maximum wallets to store (default: 10)
 
         Returns:
             Analysis results dictionary
@@ -1028,7 +1031,8 @@ class TokenAnalyzer:
             min_usd=min_usd,
             time_window_hours=time_window_hours,
             max_transactions=max_transactions,
-            max_credits=max_credits
+            max_credits=max_credits,
+            max_wallets_to_store=max_wallets_to_store
         )
 
 

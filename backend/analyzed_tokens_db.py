@@ -488,7 +488,8 @@ def save_analyzed_token(
     early_bidders: List[Dict],
     axiom_json: List[Dict],
     first_buy_timestamp: Optional[str] = None,
-    credits_used: int = 0
+    credits_used: int = 0,
+    max_wallets: int = 10
 ) -> int:
     """
     Save analyzed token and its early buyers.
@@ -552,13 +553,13 @@ def save_analyzed_token(
 
         # Insert early buyer wallets linked to this analysis run
         # NOTE: We do NOT delete existing wallets - we keep all historical analyses
-        for index, bidder in enumerate(early_bidders[:10], start=1):
+        for index, bidder in enumerate(early_bidders[:max_wallets], start=1):
             total_usd = bidder.get('total_usd', 0)
             first_buy_usd = round(total_usd)
             transaction_count = bidder.get('transaction_count', 1)
             average_buy_usd = bidder.get('average_buy_usd', total_usd)
             wallet_balance_usd = bidder.get('wallet_balance_usd')
-            axiom_name = f"({index}/10)${first_buy_usd}|{acronym}"
+            axiom_name = f"({index}/{max_wallets})${first_buy_usd}|{acronym}"
 
             cursor.execute('''
                 INSERT INTO early_buyer_wallets (
@@ -580,7 +581,7 @@ def save_analyzed_token(
                 wallet_balance_usd
             ))
 
-        print(f"[Database] Saved token {acronym} with {len(early_bidders[:10])} wallets (run #{analysis_run_id})")
+        print(f"[Database] Saved token {acronym} with {len(early_bidders[:max_wallets])} wallets (run #{analysis_run_id})")
         return token_id
 
 
@@ -659,7 +660,6 @@ def get_token_details(token_id: int) -> Optional[Dict]:
             JOIN analysis_runs ar ON ebw.analysis_run_id = ar.id
             WHERE ebw.token_id = ?
             ORDER BY ar.analysis_timestamp DESC, ebw.position ASC
-            LIMIT 10
         ''', (token_id,))
 
         token_dict['wallets'] = [dict(row) for row in cursor.fetchall()]
