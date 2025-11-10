@@ -158,6 +158,9 @@ if %ERRORLEVEL% NEQ 0 (
     echo orjson is not installed. Installing...
     echo.
     python -m pip install orjson
+    echo.
+    REM Verify installation succeeded
+    python -c "import orjson" 2>nul
     if %ERRORLEVEL% NEQ 0 (
         echo.
         echo ERROR: Failed to install orjson
