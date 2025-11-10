@@ -14,6 +14,7 @@ import os
 import json
 import re
 from datetime import datetime
+import aiofiles
 
 # Import async versions of our modules
 from helius_api_async import TokenAnalyzerAsync, generate_token_acronym, generate_axiom_export
@@ -228,7 +229,7 @@ async def run_token_analysis_async(
             max_wallets=max_wallets
         )
 
-        # Save full analysis results to file
+        # Save full analysis results to file (async)
         analysis_results_dir = os.path.join(os.path.dirname(__file__), 'analysis_results')
         os.makedirs(analysis_results_dir, exist_ok=True)
 
@@ -237,18 +238,18 @@ async def run_token_analysis_async(
         sanitized_name = sanitize_filename(token_name)
         analysis_file = os.path.join(analysis_results_dir, f"{token_id}_{sanitized_name}.json")
 
-        with open(analysis_file, 'w') as f:
-            json.dump(result, f, indent=2, default=str)
+        async with aiofiles.open(analysis_file, 'w') as f:
+            await f.write(json.dumps(result, indent=2, default=str))
 
-        # Save Axiom export to file
+        # Save Axiom export to file (async)
         axiom_exports_dir = os.path.join(os.path.dirname(__file__), 'axiom_exports')
         os.makedirs(axiom_exports_dir, exist_ok=True)
 
         sanitized_acronym = sanitize_filename(acronym, max_length=10)
         axiom_file = os.path.join(axiom_exports_dir, f"{token_id}_{sanitized_acronym}.json")
 
-        with open(axiom_file, 'w') as f:
-            json.dump(axiom_json, f, indent=2)
+        async with aiofiles.open(axiom_file, 'w') as f:
+            await f.write(json.dumps(axiom_json, indent=2))
 
         # Update job status
         analysis_jobs[job_id]['status'] = 'complete'
