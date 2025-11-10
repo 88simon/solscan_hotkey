@@ -26,7 +26,9 @@ from secure_logging import (
     log_analysis_start, log_analysis_complete, log_token_save,
     log_address_registered, log_address_removed, sanitize_address
 )
-from debug_config import is_debug_enabled
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from debug_config import is_debug_enabled, DEBUG_MODE
 
 # ============================================================================
 # OPSEC: PRODUCTION MODE - Disable Sensitive Logging
@@ -242,6 +244,14 @@ def health_check():
         "status": "running",
         "monitored_addresses": len(monitored_addresses),
         "timestamp": datetime.now().isoformat()
+    }), 200
+
+
+@app.route('/api/debug-mode', methods=['GET'])
+def get_debug_mode():
+    """Get current debug mode status (unified killswitch for backend + frontend)"""
+    return jsonify({
+        "debug_mode": DEBUG_MODE
     }), 200
 
 

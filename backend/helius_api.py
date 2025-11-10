@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import base58
 import re
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from debug_config import is_debug_enabled
 import builtins
 
