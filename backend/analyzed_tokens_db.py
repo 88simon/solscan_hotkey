@@ -920,6 +920,40 @@ def get_multi_token_wallets(min_tokens: int = 2) -> List[Dict]:
         return wallets
 
 
+def update_wallet_balance(wallet_address: str, balance_usd: float) -> bool:
+    """
+    Update the wallet balance for a given wallet address in all instances.
+
+    Args:
+        wallet_address: The wallet address to update
+        balance_usd: The new balance in USD
+
+    Returns:
+        True if at least one row was updated, False otherwise
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Update balance in early_buyer_wallets table
+        cursor.execute('''
+            UPDATE early_buyer_wallets
+            SET wallet_balance_usd = ?
+            WHERE wallet_address = ?
+        ''', (balance_usd, wallet_address))
+
+        rows_updated = cursor.getrowcount()
+        conn.commit()
+        return rows_updated > 0
+
+    except Exception as e:
+        print(f"Error updating wallet balance for {wallet_address}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
 def add_wallet_tag(wallet_address: str, tag: str, is_kol: bool = False) -> bool:
     """
     Add a tag to a wallet address.

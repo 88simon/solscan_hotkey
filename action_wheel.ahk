@@ -262,7 +262,7 @@ UpdateLayeredWindow(hwnd, hdc, x, y, width, height) {
 ; Configuration
 NOTIFICATION_DURATION := 2000  ; milliseconds
 SELECTION_DELAY := 100         ; delay after selection before copy
-LOCAL_SERVER_URL := "http://localhost:5001/register"  ; Telegram monitor service
+LOCAL_SERVER_URL := "http://localhost:5003/register"  ; FastAPI monitor service
 
 ; GDI+ initialization
 global g_GdipToken := 0
@@ -1328,8 +1328,8 @@ HandleTokenAnalysis() {
 }
 
 AnalyzeTokenWithService(tokenAddress) {
-    ; Fetch current API settings from backend
-    settingsUrl := "http://localhost:5001/api/settings"
+    ; Fetch current API settings from backend FastAPI server
+    settingsUrl := "http://localhost:5003/api/settings"
 
     ; Default settings (fallback)
     apiSettings := '{"transactionLimit":500,"minUsdFilter":50,"maxWalletsToStore":10,"apiRateDelay":100,"maxCreditsPerAnalysis":1000,"maxRetries":3}'
@@ -1373,8 +1373,9 @@ AnalyzeTokenWithService(tokenAddress) {
     }
     FileAppend jsonData, tempFile
 
-    ; Send POST request to analysis endpoint
-    analysisUrl := "http://localhost:5001/analyze/token"
+    ; Send POST request to analysis endpoint (FastAPI server on port 5003)
+    ; Phase 3 migration complete - using FastAPI for all analysis
+    analysisUrl := "http://localhost:5003/analyze/token"
     command := 'curl -X POST "' . analysisUrl . '" -H "Content-Type: application/json" -d @"' . tempFile . '" 2>&1'
 
     try {

@@ -287,7 +287,7 @@ class HeliusAPI:
         print(f"[Helius] Fetching earliest transactions using getTransactionsForAddress (efficient method)...")
         print(f"[Helius] Credit limit: {max_credits} credits (max {max_credits // 100} API calls)")
         if token_creation_time:
-            print(f"[Helius] Filtering from token creation time: {datetime.fromtimestamp(token_creation_time)}")
+            print(f"[Helius] Filtering from token creation time: {datetime.utcfromtimestamp(token_creation_time)}")
 
         all_transactions = []
         api_calls = 0
@@ -402,7 +402,7 @@ class HeliusAPI:
         """
         print(f"[Helius] Fetching earliest transactions (OLD backward pagination method)...")
         if token_creation_time:
-            print(f"[Helius] Starting from token creation time: {datetime.fromtimestamp(token_creation_time)}")
+            print(f"[Helius] Starting from token creation time: {datetime.utcfromtimestamp(token_creation_time)}")
 
         all_signatures = []
         batch_size = 1000  # Max allowed by Solana RPC
@@ -436,7 +436,7 @@ class HeliusAPI:
                         elif sig_time and sig_time < token_creation_time:
                             # We've gone past the creation time, stop pagination after this batch
                             found_older_than_creation = True
-                            print(f"[Helius] Reached token creation time ({datetime.fromtimestamp(token_creation_time)}), stopping pagination")
+                            print(f"[Helius] Reached token creation time ({datetime.utcfromtimestamp(token_creation_time)}), stopping pagination")
                             break
 
                     # Add any filtered signatures from this batch
@@ -705,7 +705,7 @@ class HeliusAPI:
         first_tx_time = None
         for tx in transactions:
             if tx.get('timestamp'):
-                first_tx_time = datetime.fromtimestamp(tx['timestamp'])
+                first_tx_time = datetime.utcfromtimestamp(tx['timestamp'])
                 break
 
         if not first_tx_time:
@@ -740,7 +740,7 @@ class HeliusAPI:
 
             total_checked += 1
 
-            tx_time = datetime.fromtimestamp(tx['timestamp'])
+            tx_time = datetime.utcfromtimestamp(tx['timestamp'])
 
             # Skip transactions outside time window
             if tx_time > window_end:

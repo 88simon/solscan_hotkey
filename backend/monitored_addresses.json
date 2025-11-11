@@ -1,18 +1,10 @@
 {
-  "CigAnCsjn97zhQE6c4m2G1arDLnR1m7AdAFxxcLGQopB": {
-    "address": "CigAnCsjn97zhQE6c4m2G1arDLnR1m7AdAFxxcLGQopB",
-    "registered_at": "2025-11-02T15:04:24.819410",
+  "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK": {
+    "address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
+    "registered_at": "2025-11-11T14:15:54.455757",
     "threshold": 100,
     "total_notifications": 0,
     "last_notification": null,
-    "note": null
-  },
-  "AvXZYFYUKHunpKiWpoK8JXy8he87dX6e5x1wb4ZGXbn5": {
-    "address": "AvXZYFYUKHunpKiWpoK8JXy8he87dX6e5x1wb4ZGXbn5",
-    "registered_at": "2025-11-02T19:51:35.978169",
-    "threshold": 100,
-    "total_notifications": 0,
-    "last_notification": null,
-    "note": null
+    "note": "Persistent wallet"
   }
 }

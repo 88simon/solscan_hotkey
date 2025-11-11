@@ -1,0 +1,135 @@
+"""
+Tags router - wallet tagging and Codex endpoints
+
+Provides REST endpoints for wallet tagging operations
+"""
+
+from fastapi import APIRouter, HTTPException
+import aiosqlite
+
+from app import settings
+from app.utils.models import AddTagRequest, RemoveTagRequest, BatchTagsRequest
+from app.cache import ResponseCache
+import analyzed_tokens_db as db
+from secure_logging import log_error
+
+router = APIRouter()
+cache = ResponseCache()
+
+
+@router.get("/wallets/{wallet_address}/tags")
+async def get_wallet_tags(wallet_address: str):
+    """Get tags for a wallet"""
+    async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
+        conn.row_factory = aiosqlite.Row
+        query = "SELECT tag, is_kol FROM wallet_tags WHERE wallet_address = ?"
+        cursor = await conn.execute(query, (wallet_address,))
+        rows = await cursor.fetchall()
+        tags = [{"tag": row[0], "is_kol": bool(row[1])} for row in rows]
+        return {"tags": tags}
+
+
+@router.post("/wallets/{wallet_address}/tags")
+async def add_wallet_tag(wallet_address: str, request: AddTagRequest):
+    """Add a tag to a wallet"""
+    async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
+        try:
+            await conn.execute(
+                "INSERT INTO wallet_tags (wallet_address, tag, is_kol) VALUES (?, ?, ?)",
+                (wallet_address, request.tag, request.is_kol)
+            )
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            raise HTTPException(status_code=400, detail="Tag already exists for this wallet")
+
+    cache.invalidate("codex")
+    return {"message": "Tag added successfully"}
+
+
+@router.delete("/wallets/{wallet_address}/tags")
+async def remove_wallet_tag(wallet_address: str, request: RemoveTagRequest):
+    """Remove a tag from a wallet"""
+    async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
+        await conn.execute(
+            "DELETE FROM wallet_tags WHERE wallet_address = ? AND tag = ?",
+            (wallet_address, request.tag)
+        )
+        await conn.commit()
+
+    cache.invalidate("codex")
+    return {"message": "Tag removed successfully"}
+
+
+@router.get("/tags")
+async def get_all_tags():
+    """Get all unique tags"""
+    cache_key = "all_tags"
+    cached_data, _ = cache.get(cache_key)
+    if cached_data:
+        return cached_data
+
+    async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
+        query = "SELECT DISTINCT tag FROM wallet_tags ORDER BY tag"
+        cursor = await conn.execute(query)
+        rows = await cursor.fetchall()
+        tags = [row[0] for row in rows]
+        result = {"tags": tags}
+        cache.set(cache_key, result)
+        return result
+
+
+@router.get("/codex")
+async def get_codex():
+    """Get all wallets with tags (Codex)"""
+    cache_key = "codex"
+    cached_data, _ = cache.get(cache_key)
+    if cached_data:
+        return cached_data
+
+    async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
+        conn.row_factory = aiosqlite.Row
+        query = """
+            SELECT wallet_address, tag, is_kol
+            FROM wallet_tags
+            ORDER BY wallet_address, tag
+        """
+        cursor = await conn.execute(query)
+        rows = await cursor.fetchall()
+
+        # Group by wallet_address
+        wallets_dict = {}
+        for row in rows:
+            wallet_addr = row[0]
+            if wallet_addr not in wallets_dict:
+                wallets_dict[wallet_addr] = {"wallet_address": wallet_addr, "tags": []}
+            wallets_dict[wallet_addr]["tags"].append({
+                "tag": row[1],
+                "is_kol": bool(row[2])
+            })
+
+        result = {"wallets": list(wallets_dict.values())}
+        cache.set(cache_key, result)
+        return result
+
+
+@router.post("/wallets/batch-tags")
+async def get_batch_wallet_tags(payload: BatchTagsRequest):
+    """Get tags for multiple wallets in one query"""
+    if not payload.addresses:
+        raise HTTPException(status_code=400, detail="addresses array is required")
+    try:
+        return db.get_multi_wallet_tags(payload.addresses)
+    except Exception as exc:
+        log_error(f"Failed to get batch wallet tags: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/tags/{tag}/wallets")
+async def get_wallets_by_tag(tag: str):
+    """Get all wallets with a specific tag"""
+    try:
+        wallets = db.get_wallets_by_tag(tag)
+        return {"tag": tag, "wallets": wallets}
+    except Exception as exc:
+        log_error(f"Failed to get wallets by tag: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))

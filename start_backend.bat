@@ -133,9 +133,9 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Start the FastAPI service (now includes WebSocket support)
 echo.
-echo Starting FastAPI service (REST + WebSocket)...
+echo Starting FastAPI service (REST + WebSocket) - Modular Architecture...
 echo [DEBUG] Window will pause on error - check for error messages
-start "Gun Del Sol - FastAPI" cmd /k "cd /d "%SCRIPT_DIR%" && python -m uvicorn fastapi_main:app --port 5003"
+start "Gun Del Sol - FastAPI" cmd /k "cd /d "%SCRIPT_DIR%" && python -m uvicorn app.main:app --port 5003"
 echo Waiting for FastAPI to start...
 timeout /t 3 /nobreak >nul
 
@@ -153,7 +153,7 @@ echo.
 REM Keep FastAPI running in foreground
 echo.
 echo ============================================================================
-echo Gun Del Sol Backend - FastAPI Service Running
+echo Gun Del Sol Backend - FastAPI Service Running (Modular Architecture)
 echo ============================================================================
 echo.
 echo FastAPI (REST + WebSocket): http://localhost:5003
@@ -161,6 +161,7 @@ echo WebSocket endpoint:         ws://localhost:5003/ws
 echo Health check:               http://localhost:5003/health
 echo Frontend Dashboard:         http://localhost:3000
 echo.
+echo Note: Using modular architecture (app.main:app)
 echo ============================================================================
 echo.
 echo Press Ctrl+C to stop the backend service

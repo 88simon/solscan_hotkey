@@ -1,0 +1,329 @@
+"""
+Analysis router - token analysis and job management endpoints
+
+Provides REST endpoints for queuing analysis jobs and checking status
+"""
+
+from fastapi import APIRouter, HTTPException
+from typing import List, Dict, Any
+import uuid
+from datetime import datetime
+import os
+import json
+import io
+import csv
+from fastapi.responses import StreamingResponse, FileResponse
+
+import analyzed_tokens_db as db
+from secure_logging import log_error
+from helius_api import TokenAnalyzer, generate_axiom_export, generate_token_acronym
+from app.settings import HELIUS_API_KEY, CURRENT_API_SETTINGS
+from app.utils.models import AnalyzeTokenRequest, AnalysisSettings
+from app.utils.validators import is_valid_solana_address
+from app.state import (
+    get_analysis_job,
+    set_analysis_job,
+    update_analysis_job,
+    get_all_analysis_jobs,
+    ANALYSIS_EXECUTOR
+)
+from app.websocket import get_connection_manager
+import asyncio
+
+router = APIRouter()
+
+
+def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
+                            time_window_hours: int, max_transactions: int,
+                            max_credits: int, max_wallets: int):
+    """Synchronous worker function for background thread pool"""
+    try:
+        token_display = f"{token_address[:4]}...{token_address[-4:]}" if len(token_address) >= 12 else "****"
+        print(f"[Job {job_id}] Starting analysis for {token_display}")
+        update_analysis_job(job_id, {'status': 'processing'})
+
+        analyzer = TokenAnalyzer(HELIUS_API_KEY)
+        result = analyzer.analyze_token(
+            mint_address=token_address,
+            min_usd=min_usd,
+            time_window_hours=time_window_hours,
+            max_transactions=max_transactions,
+            max_credits=max_credits,
+            max_wallets_to_store=max_wallets
+        )
+
+        # Extract token info
+        token_info = result.get('token_info')
+        if token_info is None:
+            token_name = 'Unknown'
+            token_symbol = 'UNK'
+        else:
+            metadata = token_info.get('onChainMetadata', {}).get('metadata', {})
+            token_name = metadata.get('name', 'Unknown')
+            token_symbol = metadata.get('symbol', 'UNK')
+
+        # Check if analysis found any meaningful data
+        early_bidders = result.get('early_bidders', [])
+        if len(early_bidders) == 0 and token_info is None:
+            print(f"[Job {job_id}] Analysis found no data - skipping database save")
+            update_analysis_job(job_id, {
+                'status': 'completed',
+                'result': result,
+                'error': result.get('error', 'No transactions found')
+            })
+            return
+
+        # Generate acronym
+        acronym = generate_token_acronym(token_name, token_symbol)
+
+        # Convert datetime objects to strings
+        for bidder in early_bidders:
+            if 'first_buy_time' in bidder and hasattr(bidder['first_buy_time'], 'isoformat'):
+                bidder['first_buy_time'] = bidder['first_buy_time'].isoformat()
+
+        # Generate Axiom export
+        axiom_export = generate_axiom_export(
+            early_bidders=early_bidders,
+            token_name=token_name,
+            token_symbol=token_symbol,
+            limit=max_wallets
+        )
+
+        # Save to database
+        token_id = db.save_analyzed_token(
+            token_address=token_address,
+            token_name=token_name,
+            token_symbol=token_symbol,
+            acronym=acronym,
+            early_bidders=early_bidders,
+            axiom_json=axiom_export,
+            first_buy_timestamp=result.get('first_transaction_time'),
+            credits_used=result.get('api_credits_used', 0),
+            max_wallets=max_wallets
+        )
+        print(f"[Job {job_id}] Saved to database (ID: {token_id})")
+
+        # Get file paths
+        analysis_filepath = db.get_analysis_file_path(token_id, token_name, in_trash=False)
+        axiom_filepath = db.get_axiom_file_path(token_id, acronym, in_trash=False)
+
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(analysis_filepath), exist_ok=True)
+        os.makedirs(os.path.dirname(axiom_filepath), exist_ok=True)
+
+        # Save files
+        with open(analysis_filepath, 'w') as f:
+            json.dump(result, f, indent=2)
+        with open(axiom_filepath, 'w') as f:
+            json.dump(axiom_export, f, indent=2)
+
+        # Update database with file paths
+        db.update_token_file_paths(token_id, analysis_filepath, axiom_filepath)
+
+        result_filename = os.path.basename(analysis_filepath)
+
+        # Update job with results
+        update_analysis_job(job_id, {
+            'status': 'completed',
+            'result': result,
+            'result_file': result_filename,
+            'axiom_file': axiom_filepath,
+            'token_id': token_id
+        })
+
+        print(f"[Job {job_id}] Analysis completed successfully")
+
+        # Send WebSocket notification
+        try:
+            notification_message = {
+                'event': 'analysis_complete',
+                'data': {
+                    'job_id': job_id,
+                    'token_name': token_name,
+                    'token_symbol': token_symbol,
+                    'acronym': acronym,
+                    'wallets_found': len(early_bidders),
+                    'token_id': token_id
+                }
+            }
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            manager = get_connection_manager()
+            loop.run_until_complete(manager.broadcast(notification_message))
+            loop.close()
+            print(f"[Job {job_id}] WebSocket notification sent")
+        except Exception as notify_error:
+            print(f"[Job {job_id}] Failed to send WebSocket notification: {notify_error}")
+
+    except Exception as e:
+        print(f"[Job {job_id}] Analysis failed: {e}")
+        update_analysis_job(job_id, {
+            'status': 'failed',
+            'error': str(e)
+        })
+
+
+@router.post("/analyze/token", status_code=202)
+async def analyze_token(request: AnalyzeTokenRequest):
+    """Analyze a token to find early bidders (queues job)"""
+    if not is_valid_solana_address(request.address):
+        raise HTTPException(status_code=400, detail="Invalid Solana address format")
+
+    settings = request.api_settings or AnalysisSettings(**CURRENT_API_SETTINGS)
+    min_usd = request.min_usd if request.min_usd is not None else settings.minUsdFilter
+
+    job_id = str(uuid.uuid4())[:8]
+    job_data = {
+        'job_id': job_id,
+        'token_address': request.address,
+        'status': 'queued',
+        'min_usd': min_usd,
+        'time_window_hours': request.time_window_hours,
+        'transaction_limit': settings.transactionLimit,
+        'max_wallets': settings.walletCount,
+        'max_credits': settings.maxCreditsPerAnalysis,
+        'created_at': datetime.now().isoformat(),
+        'result': None,
+        'error': None
+    }
+    set_analysis_job(job_id, job_data)
+
+    # Submit to thread pool
+    ANALYSIS_EXECUTOR.submit(
+        run_token_analysis_sync,
+        job_id,
+        request.address,
+        min_usd,
+        request.time_window_hours,
+        settings.transactionLimit,
+        settings.maxCreditsPerAnalysis,
+        settings.walletCount
+    )
+
+    token_display = f"{request.address[:4]}...{request.address[-4:]}"
+    print(f"[OK] Queued token analysis: {token_display} (Job ID: {job_id})")
+
+    return {
+        'status': 'queued',
+        'job_id': job_id,
+        'token_address': request.address,
+        'api_settings': {
+            'min_usd': min_usd,
+            'transaction_limit': settings.transactionLimit,
+            'max_wallets': settings.walletCount,
+            'time_window_hours': request.time_window_hours
+        },
+        'results_url': f'/analysis/{job_id}'
+    }
+
+
+@router.get("/analysis/{job_id}")
+async def get_analysis(job_id: str):
+    """Get analysis job status and results"""
+    job = get_analysis_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_copy = job.copy()
+
+    # If completed, load result from file if not in memory
+    if job_copy['status'] == 'completed' and job_copy.get('result') is None:
+        try:
+            if 'result_file' in job_copy:
+                result_file = os.path.join("analysis_results", job_copy['result_file'])
+                if os.path.exists(result_file):
+                    with open(result_file, 'r') as f:
+                        job_copy['result'] = json.load(f)
+        except Exception as e:
+            job_copy['status'] = 'failed'
+            job_copy['error'] = f"Could not load results: {str(e)}"
+
+    return job_copy
+
+
+@router.get("/analysis")
+async def list_analyses(search: str = None, limit: int = 100):
+    """List analysis jobs and completed tokens"""
+    try:
+        if search:
+            tokens = db.search_tokens(search.strip())
+        else:
+            tokens = db.get_analyzed_tokens(limit=limit)
+
+        jobs: List[Dict[str, Any]] = []
+        for token in tokens:
+            jobs.append({
+                "job_id": str(token["id"]),
+                "status": "completed",
+                "token_address": token["token_address"],
+                "token_name": token.get("token_name"),
+                "token_symbol": token.get("token_symbol"),
+                "acronym": token.get("acronym"),
+                "wallets_found": token.get("wallets_found"),
+                "timestamp": token.get("analysis_timestamp"),
+                "credits_used": token.get("last_analysis_credits", 0),
+                "results_url": f"/analysis/{token['id']}"
+            })
+
+        # Add in-progress jobs
+        if not search:
+            for job in get_all_analysis_jobs().values():
+                if job.get("status") != "completed":
+                    jobs.insert(0, job)
+
+        return {"total": len(jobs), "jobs": jobs}
+    except Exception as exc:
+        log_error(f"Failed to list analyses: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/analysis/{job_id}/csv")
+async def export_analysis_csv(job_id: str):
+    """Export analysis results as CSV"""
+    job = get_analysis_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job['status'] != 'completed' or not job.get('result'):
+        raise HTTPException(status_code=400, detail="Analysis not completed or no results")
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Wallet Address', 'First Buy Time', 'Total USD', 'Transaction Count', 'Average Buy USD'])
+
+    for bidder in job['result'].get('early_bidders', []):
+        writer.writerow([
+            bidder['wallet_address'],
+            bidder.get('first_buy_time', ''),
+            f"${bidder.get('total_usd', 0):.2f}",
+            bidder.get('transaction_count', 0),
+            f"${bidder.get('average_buy_usd', 0):.2f}"
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=token_analysis_{job_id}.csv"}
+    )
+
+
+@router.get("/analysis/{job_id}/axiom")
+async def download_axiom_export(job_id: str):
+    """Download Axiom wallet tracker JSON"""
+    job = get_analysis_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job['status'] != 'completed' or not job.get('axiom_file'):
+        raise HTTPException(status_code=400, detail="Analysis not completed or Axiom export not available")
+
+    axiom_filepath = job['axiom_file']
+    if not os.path.exists(axiom_filepath):
+        raise HTTPException(status_code=404, detail="Axiom export file not found")
+
+    return FileResponse(
+        axiom_filepath,
+        media_type="application/json",
+        filename=os.path.basename(axiom_filepath)
+    )
