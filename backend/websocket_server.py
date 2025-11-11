@@ -380,8 +380,8 @@ async def get_analysis_status(job_id: str):
 @app.get("/api/settings")
 async def get_api_settings():
     """Get API settings (for backward compatibility with AutoHotkey script)"""
-    # Load settings from config file if available
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    # Load settings from api_settings.json (same file Flask and FastAPI use)
+    settings_path = os.path.join(os.path.dirname(__file__), 'api_settings.json')
     default_settings = {
         "transactionLimit": 500,
         "minUsdFilter": 50,
@@ -391,16 +391,20 @@ async def get_api_settings():
         "maxRetries": 3
     }
 
-    if os.path.exists(config_path):
+    if os.path.exists(settings_path):
         try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                # Merge with defaults
-                if 'api_settings' in config:
-                    default_settings.update(config['api_settings'])
+            with open(settings_path, 'r') as f:
+                data = json.load(f)
+                # Merge with defaults (file values override)
+                settings = {**default_settings, **data}
+                # Add maxWalletsToStore for backward compatibility
+                settings["maxWalletsToStore"] = settings["walletCount"]
+                return settings
         except Exception as e:
-            logger.warning(f"Could not load settings from config: {e}")
+            logger.warning(f"Could not load settings from {settings_path}: {e}")
 
+    # Fallback to defaults
+    default_settings["maxWalletsToStore"] = default_settings["walletCount"]
     return default_settings
 
 if __name__ == "__main__":
