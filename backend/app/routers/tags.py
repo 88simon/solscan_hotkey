@@ -4,13 +4,13 @@ Tags router - wallet tagging and Codex endpoints
 Provides REST endpoints for wallet tagging operations
 """
 
-from fastapi import APIRouter, HTTPException
 import aiosqlite
+from fastapi import APIRouter, HTTPException
 
-from app import settings
-from app.utils.models import AddTagRequest, RemoveTagRequest, BatchTagsRequest
-from app.cache import ResponseCache
 import analyzed_tokens_db as db
+from app import settings
+from app.cache import ResponseCache
+from app.utils.models import AddTagRequest, BatchTagsRequest, RemoveTagRequest
 from secure_logging import log_error
 
 router = APIRouter()
@@ -36,7 +36,7 @@ async def add_wallet_tag(wallet_address: str, request: AddTagRequest):
         try:
             await conn.execute(
                 "INSERT INTO wallet_tags (wallet_address, tag, is_kol) VALUES (?, ?, ?)",
-                (wallet_address, request.tag, request.is_kol)
+                (wallet_address, request.tag, request.is_kol),
             )
             await conn.commit()
         except aiosqlite.IntegrityError:
@@ -51,8 +51,7 @@ async def remove_wallet_tag(wallet_address: str, request: RemoveTagRequest):
     """Remove a tag from a wallet"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
         await conn.execute(
-            "DELETE FROM wallet_tags WHERE wallet_address = ? AND tag = ?",
-            (wallet_address, request.tag)
+            "DELETE FROM wallet_tags WHERE wallet_address = ? AND tag = ?", (wallet_address, request.tag)
         )
         await conn.commit()
 
@@ -102,10 +101,7 @@ async def get_codex():
             wallet_addr = row[0]
             if wallet_addr not in wallets_dict:
                 wallets_dict[wallet_addr] = {"wallet_address": wallet_addr, "tags": []}
-            wallets_dict[wallet_addr]["tags"].append({
-                "tag": row[1],
-                "is_kol": bool(row[2])
-            })
+            wallets_dict[wallet_addr]["tags"].append({"tag": row[1], "is_kol": bool(row[2])})
 
         result = {"wallets": list(wallets_dict.values())}
         cache.set(cache_key, result)

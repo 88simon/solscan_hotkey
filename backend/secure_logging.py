@@ -74,7 +74,7 @@ def log_debug(message: str, enabled: bool = False):
     Set enabled=True only during development, never in production.
     """
     if enabled:
-        timestamp = datetime.now().strftime('%H:%M:%S')
+        timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] [DEBUG] {message}")
 
 
@@ -107,6 +107,7 @@ def log_address_removed(address: str):
 
 # Configuration: Enable/disable all logging
 LOGGING_ENABLED = True
+
 
 def set_logging_enabled(enabled: bool):
     """Enable or disable all logging globally."""

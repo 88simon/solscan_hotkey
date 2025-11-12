@@ -4,15 +4,16 @@ Webhooks router - webhook management endpoints
 Provides REST endpoints for creating and managing Helius webhooks
 """
 
-from fastapi import APIRouter, HTTPException, Request
-from datetime import datetime
 import asyncio
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Request
 
 import analyzed_tokens_db as db
-from helius_api import WebhookManager
 from app.settings import HELIUS_API_KEY
-from app.utils.models import CreateWebhookRequest
 from app.state import WEBHOOK_EXECUTOR
+from app.utils.models import CreateWebhookRequest
+from helius_api import WebhookManager
 
 router = APIRouter()
 
@@ -46,9 +47,7 @@ async def create_webhook(payload: CreateWebhookRequest):
         try:
             manager = WebhookManager(HELIUS_API_KEY)
             result = manager.create_webhook(
-                webhook_url=callback_url,
-                wallet_addresses=wallet_addresses,
-                transaction_types=["TRANSFER", "SWAP"]
+                webhook_url=callback_url, wallet_addresses=wallet_addresses, transaction_types=["TRANSFER", "SWAP"]
             )
             webhook_id = result.get("webhookID")
             print(f"[Webhook] Created webhook {webhook_id} for token {payload.token_id}")
@@ -63,7 +62,7 @@ async def create_webhook(payload: CreateWebhookRequest):
         "status": "queued",
         "message": "Webhook creation queued",
         "token_id": payload.token_id,
-        "wallets_monitored": len(wallet_addresses)
+        "wallets_monitored": len(wallet_addresses),
     }
 
 
@@ -154,7 +153,7 @@ async def webhook_callback(request: Request):
                     description=description,
                     sol_amount=sol_amount,
                     token_amount=token_amount,
-                    recipient_address=recipient
+                    recipient_address=recipient,
                 )
                 print(f"[Webhook] Saved activity for wallet {wallet_address[:8]}...")
             except Exception as exc:

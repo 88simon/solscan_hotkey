@@ -4,9 +4,11 @@ Tests for wallets router
 Tests multi-token wallet queries and balance refresh
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+
 import analyzed_tokens_db as db
 
 
@@ -34,17 +36,19 @@ class TestMultiTokenWallets:
             token_name="Token 1",
             token_symbol="TK1",
             acronym="TK1",
-            early_bidders=[{
-                "wallet_address": shared_wallet,
-                "first_buy_time": "2024-01-15T09:00:00",
-                "total_usd": 100.0,
-                "transaction_count": 1,
-                "average_buy_usd": 100.0,
-                "wallet_balance_usd": 1000.0
-            }],
+            early_bidders=[
+                {
+                    "wallet_address": shared_wallet,
+                    "first_buy_time": "2024-01-15T09:00:00",
+                    "total_usd": 100.0,
+                    "transaction_count": 1,
+                    "average_buy_usd": 100.0,
+                    "wallet_balance_usd": 1000.0,
+                }
+            ],
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Token 2
@@ -53,17 +57,19 @@ class TestMultiTokenWallets:
             token_name="Token 2",
             token_symbol="TK2",
             acronym="TK2",
-            early_bidders=[{
-                "wallet_address": shared_wallet,
-                "first_buy_time": "2024-01-16T09:00:00",
-                "total_usd": 150.0,
-                "transaction_count": 2,
-                "average_buy_usd": 75.0,
-                "wallet_balance_usd": 1500.0
-            }],
+            early_bidders=[
+                {
+                    "wallet_address": shared_wallet,
+                    "first_buy_time": "2024-01-16T09:00:00",
+                    "total_usd": 150.0,
+                    "transaction_count": 2,
+                    "average_buy_usd": 75.0,
+                    "wallet_balance_usd": 1500.0,
+                }
+            ],
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Query multi-token wallets
@@ -96,7 +102,7 @@ class TestMultiTokenWallets:
 class TestBalanceRefresh:
     """Test wallet balance refresh functionality"""
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_refresh_wallet_balances(self, mock_get, test_client: TestClient):
         """Test refreshing wallet balances"""
         # Mock Helius API response
@@ -105,9 +111,7 @@ class TestBalanceRefresh:
         mock_response.json.return_value = {"nativeBalance": 5000000}
         mock_get.return_value = mock_response
 
-        payload = {
-            "wallet_addresses": ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK"]
-        }
+        payload = {"wallet_addresses": ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK"]}
 
         response = test_client.post("/wallets/refresh-balances", json=payload)
         assert response.status_code == 200
@@ -124,7 +128,7 @@ class TestBalanceRefresh:
         response = test_client.post("/wallets/refresh-balances", json=payload)
         assert response.status_code == 422  # Validation error (min_items=1)
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_refresh_multiple_balances(self, mock_get, test_client: TestClient):
         """Test refreshing multiple wallet balances"""
         mock_response = MagicMock()
@@ -135,7 +139,7 @@ class TestBalanceRefresh:
         payload = {
             "wallet_addresses": [
                 "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-                "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
+                "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku",
             ]
         }
 

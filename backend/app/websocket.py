@@ -5,7 +5,8 @@ Handles WebSocket connections for real-time analysis updates
 """
 
 import logging
-from typing import List, Dict
+from typing import Dict, List
+
 from fastapi import WebSocket, WebSocketDisconnect
 
 # Configure logging for WebSocket
@@ -89,6 +90,7 @@ def get_connection_manager() -> ConnectionManager:
 
 # Helper functions for common notification patterns
 
+
 async def notify_analysis_start(job_id: str, token_name: str, token_symbol: str):
     """
     Send analysis start notification to all connected clients
@@ -100,19 +102,16 @@ async def notify_analysis_start(job_id: str, token_name: str, token_symbol: str)
     """
     mgr = get_connection_manager()
     message = {
-        'event': 'analysis_start',
-        'data': {
-            'job_id': job_id,
-            'token_name': token_name,
-            'token_symbol': token_symbol
-        }
+        "event": "analysis_start",
+        "data": {"job_id": job_id, "token_name": token_name, "token_symbol": token_symbol},
     }
     await mgr.broadcast(message)
     logger.info(f"[Notify] Analysis started: {token_name}")
 
 
-async def notify_analysis_complete(job_id: str, token_name: str, token_symbol: str,
-                                    acronym: str, wallets_found: int, token_id: int):
+async def notify_analysis_complete(
+    job_id: str, token_name: str, token_symbol: str, acronym: str, wallets_found: int, token_id: int
+):
     """
     Send analysis complete notification to all connected clients
 
@@ -126,15 +125,15 @@ async def notify_analysis_complete(job_id: str, token_name: str, token_symbol: s
     """
     mgr = get_connection_manager()
     message = {
-        'event': 'analysis_complete',
-        'data': {
-            'job_id': job_id,
-            'token_name': token_name,
-            'token_symbol': token_symbol,
-            'acronym': acronym,
-            'wallets_found': wallets_found,
-            'token_id': token_id
-        }
+        "event": "analysis_complete",
+        "data": {
+            "job_id": job_id,
+            "token_name": token_name,
+            "token_symbol": token_symbol,
+            "acronym": acronym,
+            "wallets_found": wallets_found,
+            "token_id": token_id,
+        },
     }
     await mgr.broadcast(message)
     logger.info(f"[Notify] Analysis complete: {token_name} ({wallets_found} wallets)")

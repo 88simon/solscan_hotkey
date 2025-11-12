@@ -6,17 +6,18 @@ Registers all routers and configures middleware.
 """
 
 import logging
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 
 # Import routers
-from app.routers import watchlist, settings_debug, tokens, analysis, wallets, tags, webhooks
+from app.routers import analysis, settings_debug, tags, tokens, wallets, watchlist, webhooks
+from app.utils.models import AnalysisCompleteNotification, AnalysisStartNotification
 
 # Import WebSocket manager and notification endpoints
 from app.websocket import get_connection_manager
-from app.utils.models import AnalysisCompleteNotification, AnalysisStartNotification
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -82,10 +83,7 @@ def create_app() -> FastAPI:
         """HTTP endpoint to trigger analysis complete notifications"""
         logger.info(f"[Notify] Analysis complete: {notification.token_name} ({notification.wallets_found} wallets)")
 
-        message = {
-            "event": "analysis_complete",
-            "data": notification.dict()
-        }
+        message = {"event": "analysis_complete", "data": notification.dict()}
 
         manager = get_connection_manager()
         await manager.broadcast(message)
@@ -97,10 +95,7 @@ def create_app() -> FastAPI:
         """HTTP endpoint to trigger analysis start notifications"""
         logger.info(f"[Notify] Analysis started: {notification.token_name}")
 
-        message = {
-            "event": "analysis_start",
-            "data": notification.dict()
-        }
+        message = {"event": "analysis_start", "data": notification.dict()}
 
         manager = get_connection_manager()
         await manager.broadcast(message)
@@ -140,4 +135,5 @@ app = create_app()
 # For development/testing
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=5003, reload=True)

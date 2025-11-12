@@ -11,16 +11,17 @@ This script:
 """
 
 import os
-import sqlite3
 import shutil
+import sqlite3
 from typing import Optional
+
 from analyzed_tokens_db import (
-    get_db_connection,
+    ANALYSIS_RESULTS_DIR,
+    AXIOM_EXPORTS_DIR,
     get_analysis_file_path,
     get_axiom_file_path,
+    get_db_connection,
     sanitize_filename,
-    ANALYSIS_RESULTS_DIR,
-    AXIOM_EXPORTS_DIR
 )
 
 
@@ -30,8 +31,8 @@ def find_analysis_file(token_name: str) -> Optional[str]:
     Returns the full path if found, None otherwise.
     """
     # Try the sanitized version used in current code
-    safe_name = token_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
-    safe_name = ''.join(c for c in safe_name if c.isalnum() or c in ('_', '-'))
+    safe_name = token_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c in ("_", "-"))
     filename = f"{safe_name}.json"
     filepath = os.path.join(ANALYSIS_RESULTS_DIR, filename)
 
@@ -40,7 +41,7 @@ def find_analysis_file(token_name: str) -> Optional[str]:
 
     # Try variations
     for file in os.listdir(ANALYSIS_RESULTS_DIR):
-        if file.endswith('.json') and not file.startswith('trash'):
+        if file.endswith(".json") and not file.startswith("trash"):
             # Simple case-insensitive match
             if file.lower() == filename.lower():
                 return os.path.join(ANALYSIS_RESULTS_DIR, file)
@@ -56,7 +57,7 @@ def find_axiom_file(acronym: str) -> Optional[str]:
     # Look for files matching the acronym pattern
     matching_files = []
     for file in os.listdir(AXIOM_EXPORTS_DIR):
-        if file.startswith(f"{acronym}_") and file.endswith('.json'):
+        if file.startswith(f"{acronym}_") and file.endswith(".json"):
             filepath = os.path.join(AXIOM_EXPORTS_DIR, file)
             matching_files.append(filepath)
 
@@ -94,7 +95,9 @@ def migrate_token_files(token_id: int, token_name: str, acronym: str):
             # Only rename if it's different from the new path
             if os.path.abspath(old_analysis_file) != os.path.abspath(new_analysis_path):
                 shutil.move(old_analysis_file, new_analysis_path)
-                print(f"  [OK] Renamed analysis file: {os.path.basename(old_analysis_file)} -> {os.path.basename(new_analysis_path)}")
+                print(
+                    f"  [OK] Renamed analysis file: {os.path.basename(old_analysis_file)} -> {os.path.basename(new_analysis_path)}"
+                )
             else:
                 print(f"  = Analysis file already has correct name: {os.path.basename(new_analysis_path)}")
             analysis_migrated = True
@@ -110,7 +113,9 @@ def migrate_token_files(token_id: int, token_name: str, acronym: str):
             # Only rename if it's different from the new path
             if os.path.abspath(old_axiom_file) != os.path.abspath(new_axiom_path):
                 shutil.move(old_axiom_file, new_axiom_path)
-                print(f"  [OK] Renamed axiom file: {os.path.basename(old_axiom_file)} -> {os.path.basename(new_axiom_path)}")
+                print(
+                    f"  [OK] Renamed axiom file: {os.path.basename(old_axiom_file)} -> {os.path.basename(new_axiom_path)}"
+                )
             else:
                 print(f"  = Axiom file already has correct name: {os.path.basename(new_axiom_path)}")
             axiom_migrated = True
@@ -124,24 +129,26 @@ def migrate_token_files(token_id: int, token_name: str, acronym: str):
 
 def main():
     """Main migration function"""
-    print("="*70)
+    print("=" * 70)
     print("File Migration Script - ID-Based Naming Convention")
-    print("="*70)
+    print("=" * 70)
 
     # Create trash directories
-    os.makedirs(os.path.join(ANALYSIS_RESULTS_DIR, 'trash'), exist_ok=True)
-    os.makedirs(os.path.join(AXIOM_EXPORTS_DIR, 'trash'), exist_ok=True)
+    os.makedirs(os.path.join(ANALYSIS_RESULTS_DIR, "trash"), exist_ok=True)
+    os.makedirs(os.path.join(AXIOM_EXPORTS_DIR, "trash"), exist_ok=True)
     print("\n[OK] Ensured trash directories exist")
 
     # Get all non-deleted tokens from database
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT id, token_name, acronym, analysis_file_path, axiom_file_path
             FROM analyzed_tokens
             WHERE is_deleted = 0
             ORDER BY id
-        ''')
+        """
+        )
         tokens = cursor.fetchall()
 
         if not tokens:
@@ -181,21 +188,24 @@ def main():
                 new_analysis_path = get_analysis_file_path(token_id, token_name, in_trash=False)
                 new_axiom_path = get_axiom_file_path(token_id, acronym, in_trash=False)
 
-                cursor.execute('''
+                cursor.execute(
+                    """
                     UPDATE analyzed_tokens
                     SET analysis_file_path = ?, axiom_file_path = ?
                     WHERE id = ?
-                ''', (new_analysis_path, new_axiom_path, token_id))
+                """,
+                    (new_analysis_path, new_axiom_path, token_id),
+                )
                 conn.commit()
                 print(f"  [OK] Updated database with file paths")
 
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("Migration Complete!")
-        print("="*70)
+        print("=" * 70)
         print(f"Analysis files migrated: {migrated_analysis}/{len(tokens)}")
         print(f"Axiom files migrated:    {migrated_axiom}/{len(tokens)}")
-        print("="*70)
+        print("=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

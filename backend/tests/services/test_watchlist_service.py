@@ -4,12 +4,14 @@ Tests for watchlist service
 Tests watchlist business logic and data persistence
 """
 
-import pytest
-import tempfile
 import json
 import os
-from app.services.watchlist_service import WatchlistService, get_watchlist_service
+import tempfile
+
+import pytest
+
 from app import state
+from app.services.watchlist_service import WatchlistService, get_watchlist_service
 
 
 @pytest.mark.unit
@@ -19,7 +21,7 @@ class TestWatchlistService:
     @pytest.fixture
     def temp_data_file(self):
         """Create a temporary data file for testing"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             temp_file = f.name
             json.dump({}, f)
 
@@ -33,6 +35,7 @@ class TestWatchlistService:
     def watchlist_service(self, temp_data_file, monkeypatch):
         """Create a watchlist service with temporary data file"""
         from app import settings
+
         monkeypatch.setattr(settings, "DATA_FILE", temp_data_file)
 
         # Clear state
@@ -78,10 +81,7 @@ class TestWatchlistService:
 
     def test_list_addresses(self, watchlist_service):
         """Test listing all addresses"""
-        addresses = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        addresses = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
 
         for addr in addresses:
             watchlist_service.register_address(addr)
@@ -128,7 +128,7 @@ class TestWatchlistService:
         """Test importing multiple addresses"""
         entries = [
             {"address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "note": "Wallet 1"},
-            {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku", "note": "Wallet 2"}
+            {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku", "note": "Wallet 2"},
         ]
 
         result = watchlist_service.import_addresses(entries)
@@ -144,7 +144,7 @@ class TestWatchlistService:
         # Import including duplicate
         entries = [
             {"address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK"},
-            {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"}
+            {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"},
         ]
 
         result = watchlist_service.import_addresses(entries)
@@ -154,10 +154,7 @@ class TestWatchlistService:
     def test_clear_all(self, watchlist_service):
         """Test clearing all addresses"""
         # Add some addresses
-        addresses = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        addresses = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
         for addr in addresses:
             watchlist_service.register_address(addr)
 
@@ -176,7 +173,7 @@ class TestWatchlistService:
         watchlist_service.register_address(address, note="Persistent wallet")
 
         # Verify data was saved to file
-        with open(temp_data_file, 'r') as f:
+        with open(temp_data_file, "r") as f:
             data = json.load(f)
 
         assert address in data

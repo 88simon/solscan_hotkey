@@ -23,38 +23,39 @@ Performance Features:
 ============================================================================
 """
 
-from fastapi import FastAPI, HTTPException, Request, Response, Body, WebSocket, WebSocketDisconnect
+import asyncio
+import hashlib
+import json
+import logging
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple
+
+import aiosqlite
+import httpx
+import requests
+from fastapi import Body, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
-import aiosqlite
-import asyncio
-import os
-from functools import lru_cache
-import time
-import hashlib
-import httpx
-import logging
 
 # Import existing modules
 import analyzed_tokens_db as db
-from helius_api import TokenAnalyzer, generate_axiom_export, generate_token_acronym, WebhookManager
-import requests
-import json
+from debug_config import DEBUG_MODE, get_debug_js_flag
+from helius_api import TokenAnalyzer, WebhookManager, generate_axiom_export, generate_token_acronym
 from secure_logging import (
+    log_address_registered,
+    log_address_removed,
+    log_error,
     log_info,
     log_success,
     log_warning,
-    log_error,
-    log_address_registered,
-    log_address_removed,
-    sanitize_address
+    sanitize_address,
 )
-from debug_config import DEBUG_MODE, get_debug_js_flag
-from concurrent.futures import ThreadPoolExecutor
 
 # ============================================================================
 # Configuration & API Key Loading
@@ -62,24 +63,26 @@ from concurrent.futures import ThreadPoolExecutor
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
 def load_api_key() -> Optional[str]:
     """Load Helius API key from environment or config file"""
     # Try environment variable first
-    api_key = os.environ.get('HELIUS_API_KEY')
+    api_key = os.environ.get("HELIUS_API_KEY")
     if api_key:
         return api_key
 
     # Try config.json (look in the backend directory where this script is located)
-    config_file = os.path.join(SCRIPT_DIR, 'config.json')
+    config_file = os.path.join(SCRIPT_DIR, "config.json")
     if os.path.exists(config_file):
         try:
-            with open(config_file, 'r') as f:
+            with open(config_file, "r") as f:
                 config = json.load(f)
-                return config.get('helius_api_key')
+                return config.get("helius_api_key")
         except Exception as e:
             print(f"[Config] Error reading config.json: {e}")
 
     return None
+
 
 HELIUS_API_KEY = load_api_key()
 if not HELIUS_API_KEY:
@@ -88,21 +91,22 @@ if not HELIUS_API_KEY:
 print(f"[Config] Loaded Helius API key: {HELIUS_API_KEY[:8]}..." if HELIUS_API_KEY else "[Config] No API key loaded")
 
 # Load API settings from file (same as Flask)
-SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'api_settings.json')
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "api_settings.json")
 DEFAULT_API_SETTINGS = {
     "transactionLimit": 500,
     "minUsdFilter": 50.0,
     "walletCount": 10,
     "apiRateDelay": 100,
     "maxCreditsPerAnalysis": 1000,
-    "maxRetries": 3
+    "maxRetries": 3,
 }
+
 
 def load_api_settings() -> dict:
     """Load API settings from file, fallback to defaults"""
     if os.path.exists(SETTINGS_FILE):
         try:
-            with open(SETTINGS_FILE, 'r') as f:
+            with open(SETTINGS_FILE, "r") as f:
                 data = json.load(f)
                 # Merge with defaults (file values override defaults)
                 return {**DEFAULT_API_SETTINGS, **data}
@@ -111,10 +115,13 @@ def load_api_settings() -> dict:
             return DEFAULT_API_SETTINGS.copy()
     return DEFAULT_API_SETTINGS.copy()
 
-CURRENT_API_SETTINGS = load_api_settings()
-print(f"[Config] API Settings: walletCount={CURRENT_API_SETTINGS['walletCount']}, transactionLimit={CURRENT_API_SETTINGS['transactionLimit']}, maxCredits={CURRENT_API_SETTINGS['maxCreditsPerAnalysis']}")
 
-# ============================================================================ 
+CURRENT_API_SETTINGS = load_api_settings()
+print(
+    f"[Config] API Settings: walletCount={CURRENT_API_SETTINGS['walletCount']}, transactionLimit={CURRENT_API_SETTINGS['transactionLimit']}, maxCredits={CURRENT_API_SETTINGS['maxCreditsPerAnalysis']}"
+)
+
+# ============================================================================
 # Monitored Address Storage (legacy JSON file)
 # ============================================================================
 
@@ -170,8 +177,10 @@ load_addresses()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 class ConnectionManager:
     """Manages WebSocket connections for real-time notifications"""
+
     def __init__(self):
         self.active_connections: List[WebSocket] = []
 
@@ -199,6 +208,7 @@ class ConnectionManager:
         # Remove disconnected clients
         for connection in disconnected:
             self.disconnect(connection)
+
 
 # Global connection manager instance
 manager = ConnectionManager()
@@ -229,6 +239,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)  # Compress responses > 1K
 # ============================================================================
 # Pydantic Models
 # ============================================================================
+
 
 class Token(BaseModel):
     id: int
@@ -293,6 +304,7 @@ class RemoveTagRequest(BaseModel):
 
 class AnalysisSettings(BaseModel):
     """API settings for token analysis"""
+
     transactionLimit: int = Field(default=CURRENT_API_SETTINGS["transactionLimit"], ge=1, le=10000)
     minUsdFilter: float = Field(default=CURRENT_API_SETTINGS["minUsdFilter"], ge=0)
     walletCount: int = Field(default=CURRENT_API_SETTINGS["walletCount"], ge=1, le=100)
@@ -303,6 +315,7 @@ class AnalysisSettings(BaseModel):
 
 class AnalyzeTokenRequest(BaseModel):
     """Request model for token analysis"""
+
     address: str = Field(..., min_length=32, max_length=44, description="Solana token address")
     api_settings: Optional[AnalysisSettings] = None
     min_usd: Optional[float] = None
@@ -357,6 +370,7 @@ class UpdateSettingsRequest(BaseModel):
 
 class AnalysisCompleteNotification(BaseModel):
     """Notification payload for analysis completion"""
+
     job_id: str
     token_name: str
     token_symbol: str
@@ -367,6 +381,7 @@ class AnalysisCompleteNotification(BaseModel):
 
 class AnalysisStartNotification(BaseModel):
     """Notification payload for analysis start"""
+
     job_id: str
     token_name: str
     token_symbol: str
@@ -380,6 +395,7 @@ class AnalysisStartNotification(BaseModel):
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, "analyzed_tokens.db")
 
+
 def get_db():
     """Get async database connection context manager"""
     return aiosqlite.connect(DB_PATH)
@@ -388,6 +404,7 @@ def get_db():
 # ============================================================================
 # Response Cache (Enhanced with ETags and Request Deduplication)
 # ============================================================================
+
 
 class ResponseCache:
     def __init__(self):
@@ -413,6 +430,7 @@ class ResponseCache:
     def _generate_etag(self, data: Any) -> str:
         """Generate ETag from response data"""
         import json
+
         content = json.dumps(data, sort_keys=True)
         return hashlib.md5(content.encode()).hexdigest()
 
@@ -448,9 +466,10 @@ class ResponseCache:
 cache = ResponseCache()
 
 
-# ============================================================================ 
+# ============================================================================
 # Address Monitoring & Utility Endpoints
 # ============================================================================
+
 
 @app.post("/register")
 async def register_address(payload: RegisterAddressRequest):
@@ -464,7 +483,7 @@ async def register_address(payload: RegisterAddressRequest):
             "status": "already_registered",
             "message": "Address already being monitored",
             "address": address,
-            "registered_at": existing.get("registered_at")
+            "registered_at": existing.get("registered_at"),
         }
 
     note = payload.note.strip() if payload.note else None
@@ -474,7 +493,7 @@ async def register_address(payload: RegisterAddressRequest):
         "threshold": DEFAULT_THRESHOLD,
         "total_notifications": 0,
         "last_notification": None,
-        "note": note
+        "note": note,
     }
 
     if not save_addresses():
@@ -487,16 +506,13 @@ async def register_address(payload: RegisterAddressRequest):
         "message": "Address registered for monitoring",
         "address": address,
         "threshold": DEFAULT_THRESHOLD,
-        "total_monitored": len(monitored_addresses)
+        "total_monitored": len(monitored_addresses),
     }
 
 
 @app.get("/addresses")
 async def list_addresses():
-    return {
-        "total": len(monitored_addresses),
-        "addresses": list(monitored_addresses.values())
-    }
+    return {"total": len(monitored_addresses), "addresses": list(monitored_addresses.values())}
 
 
 @app.get("/address/{address}")
@@ -513,11 +529,7 @@ async def delete_address(address: str):
     monitored_addresses.pop(address, None)
     save_addresses()
     log_address_removed(sanitize_address(address))
-    return {
-        "status": "success",
-        "message": "Address removed from monitoring",
-        "address": address
-    }
+    return {"status": "success", "message": "Address removed from monitoring", "address": address}
 
 
 @app.put("/address/{address}/note")
@@ -529,12 +541,7 @@ async def update_address_note(address: str, payload: AddressNoteRequest):
     monitored_addresses[address]["note"] = note
     save_addresses()
     log_success(f"Updated note for address {sanitize_address(address)}")
-    return {
-        "status": "success",
-        "message": "Note updated successfully",
-        "address": address,
-        "note": note
-    }
+    return {"status": "success", "message": "Note updated successfully", "address": address, "note": note}
 
 
 @app.post("/import")
@@ -556,7 +563,7 @@ async def import_addresses(payload: ImportAddressesRequest):
             "threshold": entry.threshold or DEFAULT_THRESHOLD,
             "total_notifications": entry.total_notifications or 0,
             "last_notification": entry.last_notification,
-            "note": entry.note
+            "note": entry.note,
         }
         added += 1
 
@@ -566,7 +573,7 @@ async def import_addresses(payload: ImportAddressesRequest):
         "message": f"Imported {added} addresses ({skipped} duplicates skipped)",
         "added": added,
         "skipped": skipped,
-        "total": len(monitored_addresses)
+        "total": len(monitored_addresses),
     }
 
 
@@ -576,11 +583,7 @@ async def clear_addresses():
     monitored_addresses.clear()
     save_addresses()
     log_warning(f"Cleared all {count} monitored addresses")
-    return {
-        "status": "success",
-        "message": f"Cleared {count} addresses",
-        "total_monitored": 0
-    }
+    return {"status": "success", "message": f"Cleared {count} addresses", "total_monitored": 0}
 
 
 @app.get("/api/debug-mode")
@@ -625,6 +628,7 @@ async def update_api_settings(payload: UpdateSettingsRequest):
 # WebSocket & Notification Endpoints
 # ============================================================================
 
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time notifications"""
@@ -647,10 +651,7 @@ async def notify_analysis_complete(notification: AnalysisCompleteNotification):
     """HTTP endpoint to trigger analysis complete notifications"""
     logger.info(f"[Notify] Analysis complete: {notification.token_name} ({notification.wallets_found} wallets)")
 
-    message = {
-        "event": "analysis_complete",
-        "data": notification.dict()
-    }
+    message = {"event": "analysis_complete", "data": notification.dict()}
 
     await manager.broadcast(message)
 
@@ -662,10 +663,7 @@ async def notify_analysis_start(notification: AnalysisStartNotification):
     """HTTP endpoint to trigger analysis start notifications"""
     logger.info(f"[Notify] Analysis started: {notification.token_name}")
 
-    message = {
-        "event": "analysis_start",
-        "data": notification.dict()
-    }
+    message = {"event": "analysis_start", "data": notification.dict()}
 
     await manager.broadcast(message)
 
@@ -679,18 +677,15 @@ async def notify_analysis_start(notification: AnalysisStartNotification):
 # Global HTTP client with connection pooling (reuses TCP connections)
 http_client = None
 
+
 async def get_http_client():
     """Get or create HTTP client with connection pooling"""
     global http_client
     if http_client is None:
         http_client = httpx.AsyncClient(
             timeout=30.0,
-            limits=httpx.Limits(
-                max_keepalive_connections=20,
-                max_connections=100,
-                keepalive_expiry=30.0
-            ),
-            http2=True  # Enable HTTP/2 for better performance
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100, keepalive_expiry=30.0),
+            http2=True,  # Enable HTTP/2 for better performance
         )
     return http_client
 
@@ -698,6 +693,7 @@ async def get_http_client():
 # ============================================================================
 # HIGH PRIORITY ENDPOINTS - Token Management (7 endpoints)
 # ============================================================================
+
 
 @app.get("/api/tokens/history")
 async def get_tokens_history(request: Request, response: Response):
@@ -749,13 +745,9 @@ async def get_tokens_history(request: Request, response: Response):
             for row in rows:
                 token_dict = dict(row)
                 tokens.append(token_dict)
-                total_wallets += token_dict.get('wallets_found', 0)
+                total_wallets += token_dict.get("wallets_found", 0)
 
-            return {
-                "total": len(tokens),
-                "total_wallets": total_wallets,
-                "tokens": tokens
-            }
+            return {"total": len(tokens), "total_wallets": total_wallets, "tokens": tokens}
 
     # Deduplicate concurrent requests
     result = await cache.deduplicate_request(cache_key, fetch_tokens)
@@ -788,11 +780,7 @@ async def get_deleted_tokens():
 
         tokens = [dict(row) for row in rows]
 
-        return {
-            "total": len(tokens),
-            "total_wallets": sum(t.get('wallets_found', 0) for t in tokens),
-            "tokens": tokens
-        }
+        return {"total": len(tokens), "total_wallets": sum(t.get("wallets_found", 0) for t in tokens), "tokens": tokens}
 
 
 @app.get("/api/tokens/{token_id}")
@@ -821,7 +809,7 @@ async def get_token_by_id(token_id: int):
         wallet_rows = await cursor.fetchall()
 
         wallets = [dict(row) for row in wallet_rows]
-        token['wallets'] = wallets
+        token["wallets"] = wallets
 
         # Get axiom export
         axiom_query = "SELECT axiom_json FROM analyzed_tokens WHERE id = ?"
@@ -829,7 +817,8 @@ async def get_token_by_id(token_id: int):
         axiom_row = await cursor.fetchone()
 
         import json
-        token['axiom_json'] = json.loads(axiom_row[0]) if axiom_row and axiom_row[0] else []
+
+        token["axiom_json"] = json.loads(axiom_row[0]) if axiom_row and axiom_row[0] else []
 
         return token
 
@@ -867,17 +856,13 @@ async def get_token_analysis_history(token_id: int):
                 WHERE analysis_run_id = ?
                 ORDER BY position ASC
             """
-            wallet_cursor = await conn.execute(wallets_query, (run['id'],))
+            wallet_cursor = await conn.execute(wallets_query, (run["id"],))
             wallet_rows = await wallet_cursor.fetchall()
-            run['wallets'] = [dict(w) for w in wallet_rows]
+            run["wallets"] = [dict(w) for w in wallet_rows]
 
             runs.append(run)
 
-        return {
-            "token_id": token_id,
-            "total_runs": len(runs),
-            "runs": runs
-        }
+        return {"token_id": token_id, "total_runs": len(runs), "runs": runs}
 
 
 @app.delete("/api/tokens/{token_id}")
@@ -910,7 +895,10 @@ async def permanent_delete_token(token_id: int):
     async with aiosqlite.connect(DB_PATH) as conn:
         # Delete in order: wallets, analysis runs, token
         await conn.execute("DELETE FROM early_buyer_wallets WHERE token_id = ?", (token_id,))
-        await conn.execute("DELETE FROM analysis_run_wallets WHERE analysis_run_id IN (SELECT id FROM analysis_runs WHERE token_id = ?)", (token_id,))
+        await conn.execute(
+            "DELETE FROM analysis_run_wallets WHERE analysis_run_id IN (SELECT id FROM analysis_runs WHERE token_id = ?)",
+            (token_id,),
+        )
         await conn.execute("DELETE FROM analysis_runs WHERE token_id = ?", (token_id,))
         await conn.execute("DELETE FROM analyzed_tokens WHERE id = ?", (token_id,))
         await conn.commit()
@@ -922,6 +910,7 @@ async def permanent_delete_token(token_id: int):
 # ============================================================================
 # HIGH PRIORITY ENDPOINTS - Wallet Operations (6 endpoints)
 # ============================================================================
+
 
 @app.get("/multi-token-wallets")
 async def get_multi_early_buyer_wallets(min_tokens: int = 2):
@@ -957,15 +946,16 @@ async def get_multi_early_buyer_wallets(min_tokens: int = 2):
         for row in rows:
             wallet_dict = dict(row)
             # Split comma-separated values
-            wallet_dict['token_names'] = wallet_dict['token_names'].split(',') if wallet_dict['token_names'] else []
-            wallet_dict['token_addresses'] = wallet_dict['token_addresses'].split(',') if wallet_dict['token_addresses'] else []
-            wallet_dict['token_ids'] = [int(id) for id in wallet_dict['token_ids'].split(',') if wallet_dict['token_ids']]
+            wallet_dict["token_names"] = wallet_dict["token_names"].split(",") if wallet_dict["token_names"] else []
+            wallet_dict["token_addresses"] = (
+                wallet_dict["token_addresses"].split(",") if wallet_dict["token_addresses"] else []
+            )
+            wallet_dict["token_ids"] = [
+                int(id) for id in wallet_dict["token_ids"].split(",") if wallet_dict["token_ids"]
+            ]
             wallets.append(wallet_dict)
 
-        result = {
-            "total": len(wallets),
-            "wallets": wallets
-        }
+        result = {"total": len(wallets), "wallets": wallets}
 
         cache.set(cache_key, result)
         return result
@@ -981,6 +971,7 @@ async def refresh_wallet_balances(request: RefreshBalancesRequest):
 
     # Load Helius API key
     from helius_api import load_helius_key
+
     api_key = load_helius_key()
 
     if not api_key:
@@ -994,31 +985,18 @@ async def refresh_wallet_balances(request: RefreshBalancesRequest):
             response = await loop.run_in_executor(
                 None,
                 lambda: requests.get(
-                    f"https://api.helius.xyz/v0/addresses/{wallet_address}/balances?api-key={api_key}",
-                    timeout=10
-                )
+                    f"https://api.helius.xyz/v0/addresses/{wallet_address}/balances?api-key={api_key}", timeout=10
+                ),
             )
 
             if response.status_code == 200:
                 data = response.json()
-                balance_usd = data.get('nativeBalance', 0) * 0.001  # Mock conversion
-                return {
-                    "wallet_address": wallet_address,
-                    "balance_usd": balance_usd,
-                    "success": True
-                }
+                balance_usd = data.get("nativeBalance", 0) * 0.001  # Mock conversion
+                return {"wallet_address": wallet_address, "balance_usd": balance_usd, "success": True}
             else:
-                return {
-                    "wallet_address": wallet_address,
-                    "balance_usd": None,
-                    "success": False
-                }
+                return {"wallet_address": wallet_address, "balance_usd": None, "success": False}
         except Exception as e:
-            return {
-                "wallet_address": wallet_address,
-                "balance_usd": None,
-                "success": False
-            }
+            return {"wallet_address": wallet_address, "balance_usd": None, "success": False}
 
     # Fetch all balances concurrently
     results = await asyncio.gather(*[fetch_balance(addr) for addr in wallet_addresses])
@@ -1026,23 +1004,23 @@ async def refresh_wallet_balances(request: RefreshBalancesRequest):
     # Update database
     async with aiosqlite.connect(DB_PATH) as conn:
         for result in results:
-            if result['success'] and result['balance_usd'] is not None:
+            if result["success"] and result["balance_usd"] is not None:
                 await conn.execute(
                     "UPDATE early_buyer_wallets SET wallet_balance_usd = ? WHERE wallet_address = ?",
-                    (result['balance_usd'], result['wallet_address'])
+                    (result["balance_usd"], result["wallet_address"]),
                 )
         await conn.commit()
 
     cache.invalidate("multi_early_buyer_wallets")
 
-    successful = sum(1 for r in results if r['success'])
+    successful = sum(1 for r in results if r["success"])
 
     return {
         "message": f"Refreshed {successful} of {len(wallet_addresses)} wallets",
         "results": results,
         "total_wallets": len(wallet_addresses),
         "successful": successful,
-        "api_credits_used": len(wallet_addresses)
+        "api_credits_used": len(wallet_addresses),
     }
 
 
@@ -1066,7 +1044,7 @@ async def add_wallet_tag(wallet_address: str, request: AddTagRequest):
         try:
             await conn.execute(
                 "INSERT INTO wallet_tags (wallet_address, tag, is_kol) VALUES (?, ?, ?)",
-                (wallet_address, request.tag, request.is_kol)
+                (wallet_address, request.tag, request.is_kol),
             )
             await conn.commit()
         except aiosqlite.IntegrityError:
@@ -1081,8 +1059,7 @@ async def remove_wallet_tag(wallet_address: str, request: RemoveTagRequest):
     """Remove a tag from a wallet"""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
-            "DELETE FROM wallet_tags WHERE wallet_address = ? AND tag = ?",
-            (wallet_address, request.tag)
+            "DELETE FROM wallet_tags WHERE wallet_address = ? AND tag = ?", (wallet_address, request.tag)
         )
         await conn.commit()
 
@@ -1114,6 +1091,7 @@ async def get_all_tags():
 # HIGH PRIORITY ENDPOINTS - Codex (1 endpoint)
 # ============================================================================
 
+
 @app.get("/codex")
 async def get_codex():
     """Get all wallets with tags (Codex)"""
@@ -1138,10 +1116,7 @@ async def get_codex():
             wallet_addr = row[0]
             if wallet_addr not in wallets_dict:
                 wallets_dict[wallet_addr] = {"wallet_address": wallet_addr, "tags": []}
-            wallets_dict[wallet_addr]["tags"].append({
-                "tag": row[1],
-                "is_kol": bool(row[2])
-            })
+            wallets_dict[wallet_addr]["tags"].append({"tag": row[1], "is_kol": bool(row[2])})
 
         result = {"wallets": list(wallets_dict.values())}
         cache.set(cache_key, result)
@@ -1159,18 +1134,20 @@ async def list_analyses(search: Optional[str] = None, limit: int = 100):
 
         jobs: List[Dict[str, Any]] = []
         for token in tokens:
-            jobs.append({
-                "job_id": str(token["id"]),
-                "status": "completed",
-                "token_address": token["token_address"],
-                "token_name": token.get("token_name"),
-                "token_symbol": token.get("token_symbol"),
-                "acronym": token.get("acronym"),
-                "wallets_found": token.get("wallets_found"),
-                "timestamp": token.get("analysis_timestamp"),
-                "credits_used": token.get("last_analysis_credits", 0),
-                "results_url": f"/analysis/{token['id']}"
-            })
+            jobs.append(
+                {
+                    "job_id": str(token["id"]),
+                    "status": "completed",
+                    "token_address": token["token_address"],
+                    "token_name": token.get("token_name"),
+                    "token_symbol": token.get("token_symbol"),
+                    "acronym": token.get("acronym"),
+                    "wallets_found": token.get("wallets_found"),
+                    "timestamp": token.get("analysis_timestamp"),
+                    "credits_used": token.get("last_analysis_credits", 0),
+                    "results_url": f"/analysis/{token['id']}",
+                }
+            )
 
         if not search:
             for job in analysis_jobs.values():
@@ -1208,12 +1185,13 @@ async def get_wallets_by_tag(tag: str):
 # Analysis Endpoints (Phase 3 Migration)
 # ============================================================================
 
-import uuid
-import json
-import io
 import csv
+import io
+import json
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from fastapi.responses import StreamingResponse, FileResponse
+
+from fastapi.responses import FileResponse, StreamingResponse
 
 # Thread pool for background analysis jobs
 ANALYSIS_EXECUTOR = ThreadPoolExecutor(max_workers=10, thread_name_prefix="analysis")
@@ -1226,8 +1204,10 @@ analysis_jobs: Dict[str, Dict[str, Any]] = {}
 ANALYSIS_RESULTS_DIR = "analysis_results"
 os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
 
+
 class AnalysisJob(BaseModel):
     """Analysis job status"""
+
     job_id: str
     token_address: str
     status: str  # queued, processing, completed, failed
@@ -1236,6 +1216,7 @@ class AnalysisJob(BaseModel):
     error: Optional[str] = None
     axiom_file: Optional[str] = None
     result_file: Optional[str] = None
+
 
 def is_valid_solana_address(address: str) -> bool:
     """Validate Solana address format"""
@@ -1247,17 +1228,25 @@ def is_valid_solana_address(address: str) -> bool:
     valid_chars = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
     return all(c in valid_chars for c in address)
 
-def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
-                            time_window_hours: int, max_transactions: int,
-                            max_credits: int, max_wallets: int):
+
+def run_token_analysis_sync(
+    job_id: str,
+    token_address: str,
+    min_usd: float,
+    time_window_hours: int,
+    max_transactions: int,
+    max_credits: int,
+    max_wallets: int,
+):
     """Synchronous worker function for background thread pool"""
     try:
-        from helius_api import TokenAnalyzer
         import os
+
+        from helius_api import TokenAnalyzer
 
         token_display = f"{token_address[:4]}...{token_address[-4:]}" if len(token_address) >= 12 else "****"
         print(f"[Job {job_id}] Starting analysis for {token_display}")
-        analysis_jobs[job_id]['status'] = 'processing'
+        analysis_jobs[job_id]["status"] = "processing"
 
         # Use globally loaded Helius API key
         analyzer = TokenAnalyzer(HELIUS_API_KEY)
@@ -1268,29 +1257,27 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
             time_window_hours=time_window_hours,
             max_transactions=max_transactions,
             max_credits=max_credits,
-            max_wallets_to_store=max_wallets
+            max_wallets_to_store=max_wallets,
         )
 
         # Extract token info
-        token_info = result.get('token_info')
+        token_info = result.get("token_info")
         if token_info is None:
-            token_name = 'Unknown'
-            token_symbol = 'UNK'
+            token_name = "Unknown"
+            token_symbol = "UNK"
         else:
-            metadata = token_info.get('onChainMetadata', {}).get('metadata', {})
-            token_name = metadata.get('name', 'Unknown')
-            token_symbol = metadata.get('symbol', 'UNK')
+            metadata = token_info.get("onChainMetadata", {}).get("metadata", {})
+            token_name = metadata.get("name", "Unknown")
+            token_symbol = metadata.get("symbol", "UNK")
 
         # Check if analysis found any meaningful data
-        early_bidders = result.get('early_bidders', [])
+        early_bidders = result.get("early_bidders", [])
         if len(early_bidders) == 0 and token_info is None:
             # Analysis failed - no transactions found, don't save to avoid overwriting existing data
             print(f"[Job {job_id}] Analysis found no data - skipping database save to preserve existing records")
-            analysis_jobs[job_id].update({
-                'status': 'completed',
-                'result': result,
-                'error': result.get('error', 'No transactions found')
-            })
+            analysis_jobs[job_id].update(
+                {"status": "completed", "result": result, "error": result.get("error", "No transactions found")}
+            )
             print(f"[Job {job_id}] Analysis completed (no data found)")
             return
 
@@ -1299,15 +1286,12 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
 
         # Convert datetime objects to strings
         for bidder in early_bidders:
-            if 'first_buy_time' in bidder and hasattr(bidder['first_buy_time'], 'isoformat'):
-                bidder['first_buy_time'] = bidder['first_buy_time'].isoformat()
+            if "first_buy_time" in bidder and hasattr(bidder["first_buy_time"], "isoformat"):
+                bidder["first_buy_time"] = bidder["first_buy_time"].isoformat()
 
         # Generate Axiom export first (needed for save_analyzed_token)
         axiom_export = generate_axiom_export(
-            early_bidders=early_bidders,
-            token_name=token_name,
-            token_symbol=token_symbol,
-            limit=max_wallets
+            early_bidders=early_bidders, token_name=token_name, token_symbol=token_symbol, limit=max_wallets
         )
 
         # Save to database - use correct field names from analyzer result
@@ -1318,9 +1302,9 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
             acronym=acronym,
             early_bidders=early_bidders,
             axiom_json=axiom_export,
-            first_buy_timestamp=result.get('first_transaction_time'),  # Correct field name
-            credits_used=result.get('api_credits_used', 0),  # Correct field name
-            max_wallets=max_wallets
+            first_buy_timestamp=result.get("first_transaction_time"),  # Correct field name
+            credits_used=result.get("api_credits_used", 0),  # Correct field name
+            max_wallets=max_wallets,
         )
         print(f"[Job {job_id}] Saved to database (ID: {token_id})")
 
@@ -1333,11 +1317,11 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
         os.makedirs(os.path.dirname(axiom_filepath), exist_ok=True)
 
         # Save analysis results file
-        with open(analysis_filepath, 'w') as f:
+        with open(analysis_filepath, "w") as f:
             json.dump(result, f, indent=2)
 
         # Save Axiom export file
-        with open(axiom_filepath, 'w') as f:
+        with open(axiom_filepath, "w") as f:
             json.dump(axiom_export, f, indent=2)
 
         # Update database with file paths
@@ -1347,28 +1331,30 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
         result_filename = os.path.basename(analysis_filepath)
 
         # Update job with results
-        analysis_jobs[job_id].update({
-            'status': 'completed',
-            'result': result,
-            'result_file': result_filename,
-            'axiom_file': axiom_filepath,
-            'token_id': token_id
-        })
+        analysis_jobs[job_id].update(
+            {
+                "status": "completed",
+                "result": result,
+                "result_file": result_filename,
+                "axiom_file": axiom_filepath,
+                "token_id": token_id,
+            }
+        )
 
         print(f"[Job {job_id}] Analysis completed successfully")
 
         # Send WebSocket notification via ConnectionManager
         try:
             notification_message = {
-                'event': 'analysis_complete',
-                'data': {
-                    'job_id': job_id,
-                    'token_name': token_name,
-                    'token_symbol': token_symbol,
-                    'acronym': acronym,
-                    'wallets_found': len(early_bidders),
-                    'token_id': token_id
-                }
+                "event": "analysis_complete",
+                "data": {
+                    "job_id": job_id,
+                    "token_name": token_name,
+                    "token_symbol": token_symbol,
+                    "acronym": acronym,
+                    "wallets_found": len(early_bidders),
+                    "token_id": token_id,
+                },
             }
             # Schedule async broadcast from sync context
             loop = asyncio.new_event_loop()
@@ -1381,10 +1367,8 @@ def run_token_analysis_sync(job_id: str, token_address: str, min_usd: float,
 
     except Exception as e:
         print(f"[Job {job_id}] Analysis failed: {e}")
-        analysis_jobs[job_id].update({
-            'status': 'failed',
-            'error': str(e)
-        })
+        analysis_jobs[job_id].update({"status": "failed", "error": str(e)})
+
 
 @app.post("/analyze/token", status_code=202)
 async def analyze_token(request: AnalyzeTokenRequest):
@@ -1403,17 +1387,17 @@ async def analyze_token(request: AnalyzeTokenRequest):
     # Create job
     job_id = str(uuid.uuid4())[:8]
     analysis_jobs[job_id] = {
-        'job_id': job_id,
-        'token_address': request.address,
-        'status': 'queued',
-        'min_usd': min_usd,
-        'time_window_hours': request.time_window_hours,
-        'transaction_limit': settings.transactionLimit,
-        'max_wallets': settings.walletCount,
-        'max_credits': settings.maxCreditsPerAnalysis,
-        'created_at': datetime.now().isoformat(),
-        'result': None,
-        'error': None
+        "job_id": job_id,
+        "token_address": request.address,
+        "status": "queued",
+        "min_usd": min_usd,
+        "time_window_hours": request.time_window_hours,
+        "transaction_limit": settings.transactionLimit,
+        "max_wallets": settings.walletCount,
+        "max_credits": settings.maxCreditsPerAnalysis,
+        "created_at": datetime.now().isoformat(),
+        "result": None,
+        "error": None,
     }
 
     # Submit to thread pool
@@ -1425,24 +1409,25 @@ async def analyze_token(request: AnalyzeTokenRequest):
         request.time_window_hours,
         settings.transactionLimit,
         settings.maxCreditsPerAnalysis,
-        settings.walletCount
+        settings.walletCount,
     )
 
     token_display = f"{request.address[:4]}...{request.address[-4:]}" if len(request.address) >= 12 else "****"
     print(f"[OK] Queued token analysis: {token_display} (Job ID: {job_id})")
 
     return {
-        'status': 'queued',
-        'job_id': job_id,
-        'token_address': request.address,
-        'api_settings': {
-            'min_usd': min_usd,
-            'transaction_limit': settings.transactionLimit,
-            'max_wallets': settings.walletCount,
-            'time_window_hours': request.time_window_hours
+        "status": "queued",
+        "job_id": job_id,
+        "token_address": request.address,
+        "api_settings": {
+            "min_usd": min_usd,
+            "transaction_limit": settings.transactionLimit,
+            "max_wallets": settings.walletCount,
+            "time_window_hours": request.time_window_hours,
         },
-        'results_url': f'/analysis/{job_id}'
+        "results_url": f"/analysis/{job_id}",
     }
+
 
 @app.get("/analysis/{job_id}")
 async def get_analysis(job_id: str):
@@ -1453,18 +1438,19 @@ async def get_analysis(job_id: str):
     job = analysis_jobs[job_id].copy()
 
     # If completed, load result from file if not in memory
-    if job['status'] == 'completed' and job.get('result') is None:
+    if job["status"] == "completed" and job.get("result") is None:
         try:
-            if 'result_file' in job:
-                result_file = os.path.join(ANALYSIS_RESULTS_DIR, job['result_file'])
+            if "result_file" in job:
+                result_file = os.path.join(ANALYSIS_RESULTS_DIR, job["result_file"])
                 if os.path.exists(result_file):
-                    with open(result_file, 'r') as f:
-                        job['result'] = json.load(f)
+                    with open(result_file, "r") as f:
+                        job["result"] = json.load(f)
         except Exception as e:
-            job['status'] = 'failed'
-            job['error'] = f"Could not load results: {str(e)}"
+            job["status"] = "failed"
+            job["error"] = f"Could not load results: {str(e)}"
 
     return job
+
 
 @app.get("/analysis/{job_id}/csv")
 async def export_analysis_csv(job_id: str):
@@ -1474,7 +1460,7 @@ async def export_analysis_csv(job_id: str):
 
     job = analysis_jobs[job_id]
 
-    if job['status'] != 'completed' or not job.get('result'):
+    if job["status"] != "completed" or not job.get("result"):
         raise HTTPException(status_code=400, detail="Analysis not completed or no results")
 
     # Create CSV in memory
@@ -1482,27 +1468,28 @@ async def export_analysis_csv(job_id: str):
     writer = csv.writer(output)
 
     # Write header
-    writer.writerow(['Wallet Address', 'First Buy Time', 'Total USD', 'Transaction Count', 'Average Buy USD'])
+    writer.writerow(["Wallet Address", "First Buy Time", "Total USD", "Transaction Count", "Average Buy USD"])
 
     # Write data
-    for bidder in job['result'].get('early_bidders', []):
-        writer.writerow([
-            bidder['wallet_address'],
-            bidder.get('first_buy_time', ''),
-            f"${bidder.get('total_usd', 0):.2f}",
-            bidder.get('transaction_count', 0),
-            f"${bidder.get('average_buy_usd', 0):.2f}"
-        ])
+    for bidder in job["result"].get("early_bidders", []):
+        writer.writerow(
+            [
+                bidder["wallet_address"],
+                bidder.get("first_buy_time", ""),
+                f"${bidder.get('total_usd', 0):.2f}",
+                bidder.get("transaction_count", 0),
+                f"${bidder.get('average_buy_usd', 0):.2f}",
+            ]
+        )
 
     # Return as streaming response
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=token_analysis_{job_id}.csv"
-        }
+        headers={"Content-Disposition": f"attachment; filename=token_analysis_{job_id}.csv"},
     )
+
 
 @app.get("/analysis/{job_id}/axiom")
 async def download_axiom_export(job_id: str):
@@ -1512,23 +1499,20 @@ async def download_axiom_export(job_id: str):
 
     job = analysis_jobs[job_id]
 
-    if job['status'] != 'completed' or not job.get('axiom_file'):
+    if job["status"] != "completed" or not job.get("axiom_file"):
         raise HTTPException(status_code=400, detail="Analysis not completed or Axiom export not available")
 
-    axiom_filepath = job['axiom_file']
+    axiom_filepath = job["axiom_file"]
     if not os.path.exists(axiom_filepath):
         raise HTTPException(status_code=404, detail="Axiom export file not found")
 
-    return FileResponse(
-        axiom_filepath,
-        media_type="application/json",
-        filename=os.path.basename(axiom_filepath)
-    )
+    return FileResponse(axiom_filepath, media_type="application/json", filename=os.path.basename(axiom_filepath))
 
 
 # ============================================================================
 # Webhook Management (parity with Flask)
 # ============================================================================
+
 
 def _require_helius():
     if not HELIUS_API_KEY:
@@ -1553,9 +1537,7 @@ async def create_webhook(payload: CreateWebhookRequest):
         try:
             manager = WebhookManager(HELIUS_API_KEY)
             result = manager.create_webhook(
-                webhook_url=callback_url,
-                wallet_addresses=wallet_addresses,
-                transaction_types=["TRANSFER", "SWAP"]
+                webhook_url=callback_url, wallet_addresses=wallet_addresses, transaction_types=["TRANSFER", "SWAP"]
             )
             webhook_id = result.get("webhookID")
             print(f"[Webhook] Created webhook {webhook_id} for token {payload.token_id}")
@@ -1570,7 +1552,7 @@ async def create_webhook(payload: CreateWebhookRequest):
         "status": "queued",
         "message": "Webhook creation queued",
         "token_id": payload.token_id,
-        "wallets_monitored": len(wallet_addresses)
+        "wallets_monitored": len(wallet_addresses),
     }
 
 
@@ -1663,7 +1645,7 @@ async def webhook_callback(request: Request):
                     description=description,
                     sol_amount=sol_amount,
                     token_amount=token_amount,
-                    recipient_address=recipient
+                    recipient_address=recipient,
                 )
                 print(f"[Webhook] Saved activity for wallet {wallet_address[:8]}...")
             except Exception as exc:
@@ -1675,6 +1657,7 @@ async def webhook_callback(request: Request):
 # ============================================================================
 # Health Check
 # ============================================================================
+
 
 @app.get("/")
 async def root():
@@ -1688,8 +1671,8 @@ async def root():
             "tokens": "/api/tokens/history",
             "analysis": "/analysis",
             "watchlist": "/addresses",
-            "settings": "/api/settings"
-        }
+            "settings": "/api/settings",
+        },
     }
 
 
@@ -1701,13 +1684,14 @@ async def health_check():
         "service": "FastAPI Gun Del Sol",
         "version": "1.0.0",
         "endpoints": 21,  # Updated to include WebSocket + notification endpoints
-        "websocket_connections": len(manager.active_connections)
+        "websocket_connections": len(manager.active_connections),
     }
 
 
 # ============================================================================
 # Startup Event
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():

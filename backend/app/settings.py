@@ -7,20 +7,20 @@ Centralizes loading of:
 - File paths (database, results directories)
 """
 
-import os
 import json
-from typing import Optional, Dict
+import os
+from typing import Dict, Optional
 
 # ============================================================================
 # Directory Paths
 # ============================================================================
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_FILE = os.path.join(SCRIPT_DIR, 'analyzed_tokens.db')
-SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'api_settings.json')
-DATA_FILE = os.path.join(SCRIPT_DIR, 'monitored_addresses.json')
-ANALYSIS_RESULTS_DIR = os.path.join(SCRIPT_DIR, 'analysis_results')
-AXIOM_EXPORTS_DIR = os.path.join(SCRIPT_DIR, 'axiom_exports')
+DATABASE_FILE = os.path.join(SCRIPT_DIR, "analyzed_tokens.db")
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "api_settings.json")
+DATA_FILE = os.path.join(SCRIPT_DIR, "monitored_addresses.json")
+ANALYSIS_RESULTS_DIR = os.path.join(SCRIPT_DIR, "analysis_results")
+AXIOM_EXPORTS_DIR = os.path.join(SCRIPT_DIR, "axiom_exports")
 
 # Ensure directories exist
 os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
@@ -30,20 +30,21 @@ os.makedirs(AXIOM_EXPORTS_DIR, exist_ok=True)
 # Helius API Key Loading
 # ============================================================================
 
+
 def load_api_key() -> Optional[str]:
     """Load Helius API key from environment or config file"""
     # Try environment variable first
-    api_key = os.environ.get('HELIUS_API_KEY')
+    api_key = os.environ.get("HELIUS_API_KEY")
     if api_key:
         return api_key
 
     # Try config.json (look in the backend directory where this script is located)
-    config_file = os.path.join(SCRIPT_DIR, 'config.json')
+    config_file = os.path.join(SCRIPT_DIR, "config.json")
     if os.path.exists(config_file):
         try:
-            with open(config_file, 'r') as f:
+            with open(config_file, "r") as f:
                 config = json.load(f)
-                return config.get('helius_api_key')
+                return config.get("helius_api_key")
         except Exception as e:
             print(f"[Config] Error reading config.json: {e}")
 
@@ -66,7 +67,7 @@ DEFAULT_API_SETTINGS = {
     "walletCount": 10,
     "apiRateDelay": 100,
     "maxCreditsPerAnalysis": 1000,
-    "maxRetries": 3
+    "maxRetries": 3,
 }
 
 DEFAULT_THRESHOLD = 100
@@ -76,7 +77,7 @@ def load_api_settings() -> Dict:
     """Load API settings from file, fallback to defaults"""
     if os.path.exists(SETTINGS_FILE):
         try:
-            with open(SETTINGS_FILE, 'r') as f:
+            with open(SETTINGS_FILE, "r") as f:
                 data = json.load(f)
                 # Merge with defaults (file values override defaults)
                 return {**DEFAULT_API_SETTINGS, **data}
@@ -100,6 +101,8 @@ def save_api_settings(settings: Dict) -> bool:
 
 # Load settings on module import
 CURRENT_API_SETTINGS = load_api_settings()
-print(f"[Config] API Settings: walletCount={CURRENT_API_SETTINGS['walletCount']}, "
-      f"transactionLimit={CURRENT_API_SETTINGS['transactionLimit']}, "
-      f"maxCredits={CURRENT_API_SETTINGS['maxCreditsPerAnalysis']}")
+print(
+    f"[Config] API Settings: walletCount={CURRENT_API_SETTINGS['walletCount']}, "
+    f"transactionLimit={CURRENT_API_SETTINGS['transactionLimit']}, "
+    f"maxCredits={CURRENT_API_SETTINGS['maxCreditsPerAnalysis']}"
+)

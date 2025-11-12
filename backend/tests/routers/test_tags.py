@@ -6,6 +6,7 @@ Tests wallet tagging and Codex functionality
 
 import pytest
 from fastapi.testclient import TestClient
+
 import analyzed_tokens_db as db
 
 
@@ -13,8 +14,7 @@ import analyzed_tokens_db as db
 class TestWalletTags:
     """Test wallet tagging endpoints"""
 
-    def test_get_tags_for_new_wallet(self, test_client: TestClient, test_db: str,
-                                      sample_wallet_address: str):
+    def test_get_tags_for_new_wallet(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test getting tags for a wallet that has no tags"""
         response = test_client.get(f"/wallets/{sample_wallet_address}/tags")
         assert response.status_code == 200
@@ -22,8 +22,7 @@ class TestWalletTags:
         data = response.json()
         assert data["tags"] == []
 
-    def test_add_tag_to_wallet(self, test_client: TestClient, test_db: str,
-                                sample_wallet_address: str):
+    def test_add_tag_to_wallet(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test adding a tag to a wallet"""
         payload = {"tag": "whale", "is_kol": False}
 
@@ -37,8 +36,7 @@ class TestWalletTags:
         assert data["tags"][0]["tag"] == "whale"
         assert data["tags"][0]["is_kol"] is False
 
-    def test_add_kol_tag(self, test_client: TestClient, test_db: str,
-                         sample_wallet_address: str):
+    def test_add_kol_tag(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test adding a KOL (Key Opinion Leader) tag"""
         payload = {"tag": "influencer", "is_kol": True}
 
@@ -51,8 +49,7 @@ class TestWalletTags:
         tag = next(t for t in data["tags"] if t["tag"] == "influencer")
         assert tag["is_kol"] is True
 
-    def test_add_duplicate_tag(self, test_client: TestClient, test_db: str,
-                                sample_wallet_address: str):
+    def test_add_duplicate_tag(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test adding the same tag twice"""
         payload = {"tag": "whale"}
 
@@ -64,8 +61,7 @@ class TestWalletTags:
         response = test_client.post(f"/wallets/{sample_wallet_address}/tags", json=payload)
         assert response.status_code == 400
 
-    def test_remove_tag_from_wallet(self, test_client: TestClient, test_db: str,
-                                     sample_wallet_address: str):
+    def test_remove_tag_from_wallet(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test removing a tag from a wallet"""
         # Add tag first
         test_client.post(f"/wallets/{sample_wallet_address}/tags", json={"tag": "whale"})
@@ -80,8 +76,7 @@ class TestWalletTags:
         data = response.json()
         assert len(data["tags"]) == 0
 
-    def test_add_multiple_tags(self, test_client: TestClient, test_db: str,
-                                sample_wallet_address: str):
+    def test_add_multiple_tags(self, test_client: TestClient, test_db: str, sample_wallet_address: str):
         """Test adding multiple tags to a wallet"""
         tags = ["whale", "early-adopter", "diamond-hands"]
 
@@ -109,10 +104,7 @@ class TestTagQueries:
     def test_get_all_tags(self, test_client: TestClient, test_db: str):
         """Test getting all unique tags"""
         # Add tags to different wallets
-        wallets = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        wallets = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
 
         test_client.post(f"/wallets/{wallets[0]}/tags", json={"tag": "whale"})
         test_client.post(f"/wallets/{wallets[1]}/tags", json={"tag": "whale"})
@@ -127,10 +119,7 @@ class TestTagQueries:
 
     def test_get_wallets_by_tag(self, test_client: TestClient, test_db: str):
         """Test getting all wallets with a specific tag"""
-        wallets = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        wallets = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
 
         # Tag both wallets
         for wallet in wallets:
@@ -180,10 +169,7 @@ class TestCodex:
 
     def test_batch_get_wallet_tags(self, test_client: TestClient, test_db: str):
         """Test getting tags for multiple wallets in one request"""
-        wallets = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        wallets = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
 
         # Add tags
         test_client.post(f"/wallets/{wallets[0]}/tags", json={"tag": "whale"})

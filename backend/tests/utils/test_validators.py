@@ -4,13 +4,11 @@ Tests for validation utilities
 Tests Solana address validation and other utility functions
 """
 
-import pytest
-from app.utils.validators import (
-    is_valid_solana_address,
-    format_timestamp,
-    sanitize_address_for_logging
-)
 from datetime import datetime
+
+import pytest
+
+from app.utils.validators import format_timestamp, is_valid_solana_address, sanitize_address_for_logging
 
 
 @pytest.mark.unit
@@ -22,7 +20,7 @@ class TestSolanaAddressValidation:
         valid_addresses = [
             "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
             "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku",
-            "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+            "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
         ]
 
         for addr in valid_addresses:

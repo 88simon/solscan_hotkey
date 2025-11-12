@@ -86,11 +86,7 @@ class TestAPISettings:
 
     def test_update_api_settings(self, test_client: TestClient):
         """Test updating API settings"""
-        new_settings = {
-            "transactionLimit": 1000,
-            "walletCount": 20,
-            "minUsdFilter": 100.0
-        }
+        new_settings = {"transactionLimit": 1000, "walletCount": 20, "minUsdFilter": 100.0}
 
         response = test_client.post("/api/settings", json=new_settings)
         assert response.status_code == 200
@@ -144,7 +140,7 @@ class TestAPISettings:
             "walletCount": 25,
             "apiRateDelay": 150,
             "maxCreditsPerAnalysis": 1500,
-            "maxRetries": 5
+            "maxRetries": 5,
         }
 
         response = test_client.post("/api/settings", json=all_settings)

@@ -14,10 +14,7 @@ class TestAddressRegistration:
 
     def test_register_valid_address(self, test_client: TestClient, sample_wallet_address: str):
         """Test registering a valid Solana address"""
-        payload = {
-            "address": sample_wallet_address,
-            "note": "Test wallet"
-        }
+        payload = {"address": sample_wallet_address, "note": "Test wallet"}
 
         response = test_client.post("/register", json=payload)
         assert response.status_code == 200
@@ -55,10 +52,7 @@ class TestAddressRegistration:
 
     def test_register_with_note(self, test_client: TestClient, sample_wallet_address: str):
         """Test registering address with a note"""
-        payload = {
-            "address": sample_wallet_address,
-            "note": "Important whale wallet"
-        }
+        payload = {"address": sample_wallet_address, "note": "Important whale wallet"}
 
         response = test_client.post("/register", json=payload)
         assert response.status_code == 200
@@ -85,10 +79,7 @@ class TestAddressListing:
     def test_list_addresses(self, test_client: TestClient):
         """Test listing registered addresses"""
         # Register multiple addresses
-        addresses = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        addresses = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
 
         for addr in addresses:
             test_client.post("/register", json={"address": addr})
@@ -104,10 +95,7 @@ class TestAddressListing:
     def test_get_specific_address(self, test_client: TestClient, sample_wallet_address: str):
         """Test getting details of a specific address"""
         # Register address
-        test_client.post("/register", json={
-            "address": sample_wallet_address,
-            "note": "Test note"
-        })
+        test_client.post("/register", json={"address": sample_wallet_address, "note": "Test note"})
 
         # Get address details
         response = test_client.get(f"/address/{sample_wallet_address}")
@@ -150,10 +138,7 @@ class TestAddressUpdate:
     def test_clear_address_note(self, test_client: TestClient, sample_wallet_address: str):
         """Test clearing an address note"""
         # Register address with note
-        test_client.post("/register", json={
-            "address": sample_wallet_address,
-            "note": "Original note"
-        })
+        test_client.post("/register", json={"address": sample_wallet_address, "note": "Original note"})
 
         # Clear note
         payload = {"note": None}
@@ -206,14 +191,8 @@ class TestBulkOperations:
         """Test importing multiple addresses at once"""
         payload = {
             "addresses": [
-                {
-                    "address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-                    "note": "Wallet 1"
-                },
-                {
-                    "address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku",
-                    "note": "Wallet 2"
-                }
+                {"address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "note": "Wallet 1"},
+                {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku", "note": "Wallet 2"},
             ]
         }
 
@@ -235,7 +214,7 @@ class TestBulkOperations:
         payload = {
             "addresses": [
                 {"address": sample_wallet_address},  # Duplicate
-                {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"}  # New
+                {"address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"},  # New
             ]
         }
 
@@ -249,10 +228,7 @@ class TestBulkOperations:
     def test_clear_all_addresses(self, test_client: TestClient):
         """Test clearing all monitored addresses"""
         # Register some addresses
-        addresses = [
-            "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-            "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"
-        ]
+        addresses = ["DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK", "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku"]
         for addr in addresses:
             test_client.post("/register", json={"address": addr})
 

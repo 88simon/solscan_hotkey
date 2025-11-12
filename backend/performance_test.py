@@ -4,20 +4,22 @@ Performance Testing Script for FastAPI vs Flask
 Demonstrates the real performance gains from optimizations
 """
 
-import requests
-import time
 import asyncio
-import httpx
+import time
 from typing import List
+
+import httpx
+import requests
 
 FASTAPI_URL = "http://localhost:5003"
 FLASK_URL = "http://localhost:5001"
 
+
 def test_cached_requests():
     """Test 1: Cached requests - 2nd load should be instant (<10ms)"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 1: Cached Requests Performance")
-    print("="*80)
+    print("=" * 80)
 
     endpoint = f"{FASTAPI_URL}/api/tokens/history"
 
@@ -34,10 +36,10 @@ def test_cached_requests():
     print(f"✓ Second request (cached):     {time2:.2f}ms")
 
     # Third request with ETag (304 response)
-    etag = response2.headers.get('etag')
+    etag = response2.headers.get("etag")
     if etag:
         start = time.time()
-        response3 = requests.get(endpoint, headers={'if-none-match': etag})
+        response3 = requests.get(endpoint, headers={"if-none-match": etag})
         time3 = (time.time() - start) * 1000
         print(f"✓ Third request (304 ETag):    {time3:.2f}ms (Status: {response3.status_code})")
 
@@ -50,11 +52,12 @@ def test_cached_requests():
     else:
         print("   [!] Note: May be slower on first run, try again")
 
+
 async def test_concurrent_balance_refresh():
     """Test 2: Concurrent balance refresh - should be 10x faster"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 2: Concurrent Balance Refresh")
-    print("="*80)
+    print("=" * 80)
 
     # Simulate 10 wallet addresses
     test_wallets = [
@@ -68,17 +71,13 @@ async def test_concurrent_balance_refresh():
     endpoint = f"{FASTAPI_URL}/wallets/refresh-balances"
 
     start = time.time()
-    response = requests.post(
-        endpoint,
-        json={"wallet_addresses": test_wallets},
-        timeout=30
-    )
+    response = requests.post(endpoint, json={"wallet_addresses": test_wallets}, timeout=30)
     elapsed = (time.time() - start) * 1000
 
     if response.ok:
         data = response.json()
-        total = data.get('total_wallets', 0)
-        successful = data.get('successful', 0)
+        total = data.get("total_wallets", 0)
+        successful = data.get("successful", 0)
 
         print(f"✓ Refreshed {successful}/{total} wallets in {elapsed:.2f}ms")
         print(f"✓ Average per wallet: {elapsed/total:.2f}ms")
@@ -88,11 +87,12 @@ async def test_concurrent_balance_refresh():
     else:
         print(f"[ERROR] Request failed: {response.status_code}")
 
+
 async def test_heavy_concurrent_load():
     """Test 3: Heavy load - 100+ concurrent requests"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 3: Heavy Concurrent Load (100 requests)")
-    print("="*80)
+    print("=" * 80)
 
     endpoint = f"{FASTAPI_URL}/health"
 
@@ -120,22 +120,23 @@ async def test_heavy_concurrent_load():
     print(f"   [OK] All 100 requests: {elapsed:.2f}ms total")
     print(f"   Average latency: {elapsed/100:.2f}ms")
 
+
 def test_compression():
     """Test 4: GZip compression - 70-90% smaller payloads"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 4: Response Compression")
-    print("="*80)
+    print("=" * 80)
 
     endpoint = f"{FASTAPI_URL}/api/tokens/history"
 
     # Request without compression
-    response1 = requests.get(endpoint, headers={'Accept-Encoding': 'identity'})
+    response1 = requests.get(endpoint, headers={"Accept-Encoding": "identity"})
     size_uncompressed = len(response1.content)
 
     # Request with compression
-    response2 = requests.get(endpoint, headers={'Accept-Encoding': 'gzip'})
+    response2 = requests.get(endpoint, headers={"Accept-Encoding": "gzip"})
     size_compressed = len(response2.content)
-    encoding = response2.headers.get('content-encoding', 'none')
+    encoding = response2.headers.get("content-encoding", "none")
 
     reduction = ((size_uncompressed - size_compressed) / size_uncompressed) * 100
 
@@ -149,11 +150,12 @@ def test_compression():
     else:
         print(f"   [!] Lower than expected (target: 70-90%)")
 
+
 def run_all_tests():
     """Run all performance tests"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print(">> FastAPI Performance Testing Suite")
-    print("="*80)
+    print("=" * 80)
     print("\nTesting production-grade optimizations:")
     print("  1. Response caching with ETags")
     print("  2. Concurrent API calls")
@@ -173,9 +175,9 @@ def run_all_tests():
         # Test 4: Compression
         test_compression()
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("[SUCCESS] All Performance Tests Complete!")
-        print("="*80)
+        print("=" * 80)
 
     except requests.exceptions.ConnectionError:
         print("\n[ERROR] Could not connect to FastAPI service")
@@ -183,6 +185,7 @@ def run_all_tests():
         print("   Run: python -m uvicorn fastapi_main:app --port 5003")
     except Exception as e:
         print(f"\n[ERROR] {e}")
+
 
 if __name__ == "__main__":
     run_all_tests()

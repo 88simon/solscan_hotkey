@@ -4,13 +4,14 @@ Pydantic models for Gun Del Sol API
 All request/response schemas used across the application
 """
 
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel, Field
 
 # ============================================================================
 # Token Models
 # ============================================================================
+
 
 class Token(BaseModel):
     id: int
@@ -36,6 +37,7 @@ class TokensResponse(BaseModel):
 # ============================================================================
 # Wallet Models
 # ============================================================================
+
 
 class MultiTokenWallet(BaseModel):
     wallet_address: str
@@ -72,6 +74,7 @@ class RefreshBalancesResponse(BaseModel):
 # Tag Models
 # ============================================================================
 
+
 class AddTagRequest(BaseModel):
     tag: str
     is_kol: bool = False
@@ -94,8 +97,10 @@ class WalletTagRequest(BaseModel):
 # Analysis Models
 # ============================================================================
 
+
 class AnalysisSettings(BaseModel):
     """API settings for token analysis"""
+
     transactionLimit: int = Field(default=500, ge=1, le=10000)
     minUsdFilter: float = Field(default=50.0, ge=0)
     walletCount: int = Field(default=10, ge=1, le=100)
@@ -106,6 +111,7 @@ class AnalysisSettings(BaseModel):
 
 class AnalyzeTokenRequest(BaseModel):
     """Request model for token analysis"""
+
     address: str = Field(..., min_length=32, max_length=44, description="Solana token address")
     api_settings: Optional[AnalysisSettings] = None
     min_usd: Optional[float] = None
@@ -114,6 +120,7 @@ class AnalyzeTokenRequest(BaseModel):
 
 class AnalysisJob(BaseModel):
     """Analysis job status"""
+
     job_id: str
     token_address: str
     status: str  # queued, processing, completed, failed
@@ -127,6 +134,7 @@ class AnalysisJob(BaseModel):
 # ============================================================================
 # Watchlist/Address Monitoring Models
 # ============================================================================
+
 
 class RegisterAddressRequest(BaseModel):
     address: str = Field(..., min_length=32, max_length=44)
@@ -155,6 +163,7 @@ class ImportAddressesRequest(BaseModel):
 # Settings Models
 # ============================================================================
 
+
 class UpdateSettingsRequest(BaseModel):
     transactionLimit: Optional[int] = Field(None, ge=1, le=10000)
     minUsdFilter: Optional[float] = Field(None, ge=0)
@@ -168,6 +177,7 @@ class UpdateSettingsRequest(BaseModel):
 # Webhook Models
 # ============================================================================
 
+
 class CreateWebhookRequest(BaseModel):
     token_id: int
     webhook_url: Optional[str] = None
@@ -177,8 +187,10 @@ class CreateWebhookRequest(BaseModel):
 # Notification Models
 # ============================================================================
 
+
 class AnalysisCompleteNotification(BaseModel):
     """Notification payload for analysis completion"""
+
     job_id: str
     token_name: str
     token_symbol: str
@@ -189,6 +201,7 @@ class AnalysisCompleteNotification(BaseModel):
 
 class AnalysisStartNotification(BaseModel):
     """Notification payload for analysis start"""
+
     job_id: str
     token_name: str
     token_symbol: str

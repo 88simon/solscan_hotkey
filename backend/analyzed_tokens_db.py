@@ -17,18 +17,18 @@ The database files are protected by .gitignore.
 ============================================================================
 """
 
-import sqlite3
 import json
 import os
-from datetime import datetime
-from typing import List, Dict, Optional
+import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
+from typing import Dict, List, Optional
 
 # Use absolute path to ensure database is always in the backend directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_FILE = os.path.join(SCRIPT_DIR, 'analyzed_tokens.db')
-ANALYSIS_RESULTS_DIR = os.path.join(SCRIPT_DIR, 'analysis_results')
-AXIOM_EXPORTS_DIR = os.path.join(SCRIPT_DIR, 'axiom_exports')
+DATABASE_FILE = os.path.join(SCRIPT_DIR, "analyzed_tokens.db")
+ANALYSIS_RESULTS_DIR = os.path.join(SCRIPT_DIR, "analysis_results")
+AXIOM_EXPORTS_DIR = os.path.join(SCRIPT_DIR, "axiom_exports")
 
 
 def sanitize_filename(text: str, max_length: int = 50) -> str:
@@ -45,17 +45,17 @@ def sanitize_filename(text: str, max_length: int = 50) -> str:
     # Convert to lowercase
     text = text.lower()
     # Replace spaces with hyphens
-    text = text.replace(' ', '-')
+    text = text.replace(" ", "-")
     # Remove any character that isn't alphanumeric or hyphen
-    text = ''.join(c for c in text if c.isalnum() or c == '-')
+    text = "".join(c for c in text if c.isalnum() or c == "-")
     # Remove consecutive hyphens
-    while '--' in text:
-        text = text.replace('--', '-')
+    while "--" in text:
+        text = text.replace("--", "-")
     # Trim hyphens from start/end
-    text = text.strip('-')
+    text = text.strip("-")
     # Truncate to max length
     if len(text) > max_length:
-        text = text[:max_length].rstrip('-')
+        text = text[:max_length].rstrip("-")
     return text
 
 
@@ -70,7 +70,7 @@ def get_analysis_file_path(token_id: int, token_name: str, in_trash: bool = Fals
     filename = f"{token_id}_{sanitized_name}.json"
 
     if in_trash:
-        return os.path.join(ANALYSIS_RESULTS_DIR, 'trash', filename)
+        return os.path.join(ANALYSIS_RESULTS_DIR, "trash", filename)
     else:
         return os.path.join(ANALYSIS_RESULTS_DIR, filename)
 
@@ -86,7 +86,7 @@ def get_axiom_file_path(token_id: int, acronym: str, in_trash: bool = False) -> 
     filename = f"{token_id}_{sanitized_acronym}.json"
 
     if in_trash:
-        return os.path.join(AXIOM_EXPORTS_DIR, 'trash', filename)
+        return os.path.join(AXIOM_EXPORTS_DIR, "trash", filename)
     else:
         return os.path.join(AXIOM_EXPORTS_DIR, filename)
 
@@ -100,11 +100,14 @@ def move_files_to_trash(token_id: int):
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT analysis_file_path, axiom_file_path
             FROM analyzed_tokens
             WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
         row = cursor.fetchone()
 
         if not row:
@@ -115,25 +118,25 @@ def move_files_to_trash(token_id: int):
         axiom_moved = False
 
         # Create trash directories if they don't exist
-        os.makedirs(os.path.join(ANALYSIS_RESULTS_DIR, 'trash'), exist_ok=True)
-        os.makedirs(os.path.join(AXIOM_EXPORTS_DIR, 'trash'), exist_ok=True)
+        os.makedirs(os.path.join(ANALYSIS_RESULTS_DIR, "trash"), exist_ok=True)
+        os.makedirs(os.path.join(AXIOM_EXPORTS_DIR, "trash"), exist_ok=True)
 
         # Move analysis file
         if analysis_path and os.path.exists(analysis_path):
-            trash_path = analysis_path.replace(ANALYSIS_RESULTS_DIR, os.path.join(ANALYSIS_RESULTS_DIR, 'trash'))
+            trash_path = analysis_path.replace(ANALYSIS_RESULTS_DIR, os.path.join(ANALYSIS_RESULTS_DIR, "trash"))
             try:
                 os.rename(analysis_path, trash_path)
-                cursor.execute('UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?', (trash_path, token_id))
+                cursor.execute("UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?", (trash_path, token_id))
                 analysis_moved = True
             except Exception as e:
                 print(f"[WARN] Failed to move analysis file: {e}")
 
         # Move axiom file
         if axiom_path and os.path.exists(axiom_path):
-            trash_path = axiom_path.replace(AXIOM_EXPORTS_DIR, os.path.join(AXIOM_EXPORTS_DIR, 'trash'))
+            trash_path = axiom_path.replace(AXIOM_EXPORTS_DIR, os.path.join(AXIOM_EXPORTS_DIR, "trash"))
             try:
                 os.rename(axiom_path, trash_path)
-                cursor.execute('UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?', (trash_path, token_id))
+                cursor.execute("UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?", (trash_path, token_id))
                 axiom_moved = True
             except Exception as e:
                 print(f"[WARN] Failed to move axiom file: {e}")
@@ -151,11 +154,14 @@ def restore_files_from_trash(token_id: int):
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT analysis_file_path, axiom_file_path
             FROM analyzed_tokens
             WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
         row = cursor.fetchone()
 
         if not row:
@@ -166,21 +172,23 @@ def restore_files_from_trash(token_id: int):
         axiom_restored = False
 
         # Restore analysis file
-        if analysis_path and 'trash' in analysis_path and os.path.exists(analysis_path):
-            restored_path = analysis_path.replace(os.path.join(ANALYSIS_RESULTS_DIR, 'trash'), ANALYSIS_RESULTS_DIR)
+        if analysis_path and "trash" in analysis_path and os.path.exists(analysis_path):
+            restored_path = analysis_path.replace(os.path.join(ANALYSIS_RESULTS_DIR, "trash"), ANALYSIS_RESULTS_DIR)
             try:
                 os.rename(analysis_path, restored_path)
-                cursor.execute('UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?', (restored_path, token_id))
+                cursor.execute(
+                    "UPDATE analyzed_tokens SET analysis_file_path = ? WHERE id = ?", (restored_path, token_id)
+                )
                 analysis_restored = True
             except Exception as e:
                 print(f"[WARN] Failed to restore analysis file: {e}")
 
         # Restore axiom file
-        if axiom_path and 'trash' in axiom_path and os.path.exists(axiom_path):
-            restored_path = axiom_path.replace(os.path.join(AXIOM_EXPORTS_DIR, 'trash'), AXIOM_EXPORTS_DIR)
+        if axiom_path and "trash" in axiom_path and os.path.exists(axiom_path):
+            restored_path = axiom_path.replace(os.path.join(AXIOM_EXPORTS_DIR, "trash"), AXIOM_EXPORTS_DIR)
             try:
                 os.rename(axiom_path, restored_path)
-                cursor.execute('UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?', (restored_path, token_id))
+                cursor.execute("UPDATE analyzed_tokens SET axiom_file_path = ? WHERE id = ?", (restored_path, token_id))
                 axiom_restored = True
             except Exception as e:
                 print(f"[WARN] Failed to restore axiom file: {e}")
@@ -198,11 +206,14 @@ def delete_token_files(token_id: int):
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT analysis_file_path, axiom_file_path
             FROM analyzed_tokens
             WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
         row = cursor.fetchone()
 
         if not row:
@@ -245,11 +256,14 @@ def update_token_file_paths(token_id: int, analysis_path: str, axiom_path: str) 
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             UPDATE analyzed_tokens
             SET analysis_file_path = ?, axiom_file_path = ?
             WHERE id = ?
-        ''', (analysis_path, axiom_path, token_id))
+        """,
+            (analysis_path, axiom_path, token_id),
+        )
         return cursor.rowcount > 0
 
 
@@ -274,7 +288,8 @@ def init_database():
         cursor = conn.cursor()
 
         # Analyzed tokens table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS analyzed_tokens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 token_address TEXT UNIQUE NOT NULL,
@@ -293,10 +308,12 @@ def init_database():
                 analysis_file_path TEXT,
                 axiom_file_path TEXT
             )
-        ''')
+        """
+        )
 
         # Analysis runs table - tracks each time we analyze a token
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS analysis_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 token_id INTEGER NOT NULL,
@@ -305,10 +322,12 @@ def init_database():
                 credits_used INTEGER DEFAULT 0,
                 FOREIGN KEY (token_id) REFERENCES analyzed_tokens(id) ON DELETE CASCADE
             )
-        ''')
+        """
+        )
 
         # Early buyer wallets table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS early_buyer_wallets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 token_id INTEGER NOT NULL,
@@ -326,10 +345,12 @@ def init_database():
                 FOREIGN KEY (analysis_run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE,
                 UNIQUE(analysis_run_id, wallet_address)
             )
-        ''')
+        """
+        )
 
         # Wallet activity events table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS wallet_activity (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 wallet_id INTEGER NOT NULL,
@@ -342,10 +363,12 @@ def init_database():
                 recipient_address TEXT,
                 FOREIGN KEY (wallet_id) REFERENCES early_buyer_wallets(id) ON DELETE CASCADE
             )
-        ''')
+        """
+        )
 
         # Wallet tags table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS wallet_tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 wallet_address TEXT NOT NULL,
@@ -354,118 +377,144 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(wallet_address, tag)
             )
-        ''')
+        """
+        )
 
         # Create indices for better query performance
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_token_address
             ON analyzed_tokens(token_address)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_wallet_address
             ON early_buyer_wallets(wallet_address)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_activity_timestamp
             ON wallet_activity(timestamp DESC)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_wallet_tags_address
             ON wallet_tags(wallet_address)
-        ''')
+        """
+        )
 
         # NEW: Critical performance indices
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_is_deleted_timestamp
             ON analyzed_tokens(is_deleted, analysis_timestamp DESC)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_token_analysis_run
             ON early_buyer_wallets(token_id, analysis_run_id)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_analysis_runs_token_timestamp
             ON analysis_runs(token_id, analysis_timestamp DESC)
-        ''')
+        """
+        )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_wallet_tags_tag
             ON wallet_tags(tag)
-        ''')
+        """
+        )
 
         # Run migrations to add new columns to existing tables
         # Check if total_usd column exists in early_buyer_wallets, if not add it
         cursor.execute("PRAGMA table_info(early_buyer_wallets)")
         ebw_columns = [col[1] for col in cursor.fetchall()]
 
-        if 'total_usd' not in ebw_columns:
+        if "total_usd" not in ebw_columns:
             print("[Database] Migrating: Adding total_usd column...")
-            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN total_usd REAL')
+            cursor.execute("ALTER TABLE early_buyer_wallets ADD COLUMN total_usd REAL")
 
-        if 'transaction_count' not in ebw_columns:
+        if "transaction_count" not in ebw_columns:
             print("[Database] Migrating: Adding transaction_count column...")
-            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN transaction_count INTEGER')
+            cursor.execute("ALTER TABLE early_buyer_wallets ADD COLUMN transaction_count INTEGER")
 
-        if 'average_buy_usd' not in ebw_columns:
+        if "average_buy_usd" not in ebw_columns:
             print("[Database] Migrating: Adding average_buy_usd column...")
-            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN average_buy_usd REAL')
+            cursor.execute("ALTER TABLE early_buyer_wallets ADD COLUMN average_buy_usd REAL")
 
-        if 'wallet_balance_usd' not in ebw_columns:
+        if "wallet_balance_usd" not in ebw_columns:
             print("[Database] Migrating: Adding wallet_balance_usd column...")
-            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN wallet_balance_usd REAL')
+            cursor.execute("ALTER TABLE early_buyer_wallets ADD COLUMN wallet_balance_usd REAL")
 
         # Check if credits_used and last_analysis_credits columns exist in analyzed_tokens, if not add them
         cursor.execute("PRAGMA table_info(analyzed_tokens)")
         at_columns = [col[1] for col in cursor.fetchall()]
 
-        if 'credits_used' not in at_columns:
+        if "credits_used" not in at_columns:
             print("[Database] Migrating: Adding credits_used column...")
-            cursor.execute('ALTER TABLE analyzed_tokens ADD COLUMN credits_used INTEGER DEFAULT 0')
+            cursor.execute("ALTER TABLE analyzed_tokens ADD COLUMN credits_used INTEGER DEFAULT 0")
 
-        if 'last_analysis_credits' not in at_columns:
+        if "last_analysis_credits" not in at_columns:
             print("[Database] Migrating: Adding last_analysis_credits column...")
-            cursor.execute('ALTER TABLE analyzed_tokens ADD COLUMN last_analysis_credits INTEGER DEFAULT 0')
+            cursor.execute("ALTER TABLE analyzed_tokens ADD COLUMN last_analysis_credits INTEGER DEFAULT 0")
 
         # Migration for analysis_run_id column in early_buyer_wallets
-        if 'analysis_run_id' not in ebw_columns:
+        if "analysis_run_id" not in ebw_columns:
             print("[Database] Migrating: Adding analysis_run_id column to early_buyer_wallets...")
             print("[Database] Warning: Existing wallet records will be linked to a default analysis run")
 
             # Add the column (allowing NULL temporarily for migration)
-            cursor.execute('ALTER TABLE early_buyer_wallets ADD COLUMN analysis_run_id INTEGER')
+            cursor.execute("ALTER TABLE early_buyer_wallets ADD COLUMN analysis_run_id INTEGER")
 
             # For each existing token, create an analysis_run entry
-            cursor.execute('SELECT DISTINCT token_id FROM early_buyer_wallets WHERE analysis_run_id IS NULL')
+            cursor.execute("SELECT DISTINCT token_id FROM early_buyer_wallets WHERE analysis_run_id IS NULL")
             token_ids = cursor.fetchall()
 
             for row in token_ids:
                 token_id = row[0]
                 # Get the token's analysis timestamp
-                cursor.execute('SELECT analysis_timestamp, wallets_found, last_analysis_credits FROM analyzed_tokens WHERE id = ?', (token_id,))
+                cursor.execute(
+                    "SELECT analysis_timestamp, wallets_found, last_analysis_credits FROM analyzed_tokens WHERE id = ?",
+                    (token_id,),
+                )
                 token_data = cursor.fetchone()
 
                 if token_data:
                     analysis_timestamp, wallets_found, credits = token_data[0], token_data[1], token_data[2]
 
                     # Create an analysis run for this token
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO analysis_runs (token_id, analysis_timestamp, wallets_found, credits_used)
                         VALUES (?, ?, ?, ?)
-                    ''', (token_id, analysis_timestamp, wallets_found or 0, credits or 0))
+                    """,
+                        (token_id, analysis_timestamp, wallets_found or 0, credits or 0),
+                    )
 
                     analysis_run_id = cursor.lastrowid
 
                     # Link all existing wallets for this token to this analysis run
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         UPDATE early_buyer_wallets
                         SET analysis_run_id = ?
                         WHERE token_id = ? AND analysis_run_id IS NULL
-                    ''', (analysis_run_id, token_id))
+                    """,
+                        (analysis_run_id, token_id),
+                    )
 
             print("[Database] Migration complete: Existing wallets linked to analysis runs")
 
@@ -473,9 +522,9 @@ def init_database():
         cursor.execute("PRAGMA table_info(wallet_tags)")
         wt_columns = [col[1] for col in cursor.fetchall()]
 
-        if 'is_kol' not in wt_columns:
+        if "is_kol" not in wt_columns:
             print("[Database] Migrating: Adding is_kol column to wallet_tags...")
-            cursor.execute('ALTER TABLE wallet_tags ADD COLUMN is_kol BOOLEAN DEFAULT 0')
+            cursor.execute("ALTER TABLE wallet_tags ADD COLUMN is_kol BOOLEAN DEFAULT 0")
 
         print("[Database] Schema initialized successfully")
 
@@ -489,7 +538,7 @@ def save_analyzed_token(
     axiom_json: List[Dict],
     first_buy_timestamp: Optional[str] = None,
     credits_used: int = 0,
-    max_wallets: int = 10
+    max_wallets: int = 10,
 ) -> int:
     """
     Save analyzed token and its early buyers.
@@ -511,7 +560,8 @@ def save_analyzed_token(
         cursor = conn.cursor()
 
         # Insert or update analyzed token
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO analyzed_tokens (
                 token_address, token_name, token_symbol, acronym,
                 first_buy_timestamp, wallets_found, axiom_json, credits_used, last_analysis_credits
@@ -526,27 +576,32 @@ def save_analyzed_token(
                 axiom_json = excluded.axiom_json,
                 credits_used = analyzed_tokens.credits_used + excluded.credits_used,
                 last_analysis_credits = excluded.last_analysis_credits
-        ''', (
-            token_address,
-            token_name,
-            token_symbol,
-            acronym,
-            first_buy_timestamp,
-            len(early_bidders),
-            json.dumps(axiom_json),
-            credits_used,
-            credits_used
-        ))
+        """,
+            (
+                token_address,
+                token_name,
+                token_symbol,
+                acronym,
+                first_buy_timestamp,
+                len(early_bidders),
+                json.dumps(axiom_json),
+                credits_used,
+                credits_used,
+            ),
+        )
 
         # Get the token ID
-        cursor.execute('SELECT id FROM analyzed_tokens WHERE token_address = ?', (token_address,))
-        token_id = cursor.fetchone()['id']
+        cursor.execute("SELECT id FROM analyzed_tokens WHERE token_address = ?", (token_address,))
+        token_id = cursor.fetchone()["id"]
 
         # Create a new analysis run entry for this analysis
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO analysis_runs (token_id, wallets_found, credits_used)
             VALUES (?, ?, ?)
-        ''', (token_id, len(early_bidders), credits_used))
+        """,
+            (token_id, len(early_bidders), credits_used),
+        )
 
         analysis_run_id = cursor.lastrowid
         print(f"[Database] Created analysis run #{analysis_run_id} for token {acronym}")
@@ -558,32 +613,35 @@ def save_analyzed_token(
         skipped_count = 0
 
         for index, bidder in enumerate(early_bidders[:max_wallets], start=1):
-            total_usd = bidder.get('total_usd', 0)
+            total_usd = bidder.get("total_usd", 0)
             first_buy_usd = round(total_usd)
-            transaction_count = bidder.get('transaction_count', 1)
-            average_buy_usd = bidder.get('average_buy_usd', total_usd)
-            wallet_balance_usd = bidder.get('wallet_balance_usd')
+            transaction_count = bidder.get("transaction_count", 1)
+            average_buy_usd = bidder.get("average_buy_usd", total_usd)
+            wallet_balance_usd = bidder.get("wallet_balance_usd")
             axiom_name = f"({index}/{max_wallets})${first_buy_usd}|{acronym}"
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO early_buyer_wallets (
                     token_id, analysis_run_id, wallet_address, position, first_buy_usd,
                     total_usd, transaction_count, average_buy_usd,
                     first_buy_timestamp, axiom_name, wallet_balance_usd
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                token_id,
-                analysis_run_id,
-                bidder['wallet_address'],
-                index,
-                first_buy_usd,
-                total_usd,
-                transaction_count,
-                average_buy_usd,
-                bidder.get('first_buy_time'),
-                axiom_name,
-                wallet_balance_usd
-            ))
+            """,
+                (
+                    token_id,
+                    analysis_run_id,
+                    bidder["wallet_address"],
+                    index,
+                    first_buy_usd,
+                    total_usd,
+                    transaction_count,
+                    average_buy_usd,
+                    bidder.get("first_buy_time"),
+                    axiom_name,
+                    wallet_balance_usd,
+                ),
+            )
 
             # Track if this was a new insert or ignored duplicate
             if cursor.rowcount > 0:
@@ -592,7 +650,9 @@ def save_analyzed_token(
                 skipped_count += 1
 
         if skipped_count > 0:
-            print(f"[Database] Saved token {acronym}: {inserted_count} new wallets, {skipped_count} already existed (run #{analysis_run_id})")
+            print(
+                f"[Database] Saved token {acronym}: {inserted_count} new wallets, {skipped_count} already existed (run #{analysis_run_id})"
+            )
         else:
             print(f"[Database] Saved token {acronym} with {inserted_count} wallets (run #{analysis_run_id})")
         return token_id
@@ -604,7 +664,8 @@ def get_analyzed_tokens(limit: int = 50, include_deleted: bool = False) -> List[
         cursor = conn.cursor()
 
         if include_deleted:
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT
                     id, token_address, token_name, token_symbol, acronym,
                     analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
@@ -612,9 +673,12 @@ def get_analyzed_tokens(limit: int = 50, include_deleted: bool = False) -> List[
                 FROM analyzed_tokens
                 ORDER BY analysis_timestamp DESC
                 LIMIT ?
-            ''', (limit,))
+            """,
+                (limit,),
+            )
         else:
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT
                     id, token_address, token_name, token_symbol, acronym,
                     analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
@@ -623,24 +687,29 @@ def get_analyzed_tokens(limit: int = 50, include_deleted: bool = False) -> List[
                 WHERE is_deleted = 0 OR is_deleted IS NULL
                 ORDER BY analysis_timestamp DESC
                 LIMIT ?
-            ''', (limit,))
+            """,
+                (limit,),
+            )
 
         tokens = []
         for row in cursor.fetchall():
             token_dict = dict(row)
 
             # Get wallet addresses for this token (from most recent analysis)
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT DISTINCT ebw.wallet_address
                 FROM early_buyer_wallets ebw
                 JOIN analysis_runs ar ON ebw.analysis_run_id = ar.id
                 WHERE ebw.token_id = ?
                 ORDER BY ar.analysis_timestamp DESC
                 LIMIT 10
-            ''', (token_dict['id'],))
+            """,
+                (token_dict["id"],),
+            )
 
             wallet_addresses = [row[0] for row in cursor.fetchall()]
-            token_dict['wallet_addresses'] = wallet_addresses
+            token_dict["wallet_addresses"] = wallet_addresses
 
             tokens.append(token_dict)
 
@@ -653,9 +722,12 @@ def get_token_details(token_id: int) -> Optional[Dict]:
         cursor = conn.cursor()
 
         # Get token info
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT * FROM analyzed_tokens WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
 
         token = cursor.fetchone()
         if not token:
@@ -664,18 +736,21 @@ def get_token_details(token_id: int) -> Optional[Dict]:
         token_dict = dict(token)
 
         # Parse axiom_json back to list
-        if token_dict.get('axiom_json'):
-            token_dict['axiom_json'] = json.loads(token_dict['axiom_json'])
+        if token_dict.get("axiom_json"):
+            token_dict["axiom_json"] = json.loads(token_dict["axiom_json"])
 
         # Get associated wallets from the most recent analysis run
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT ebw.* FROM early_buyer_wallets ebw
             JOIN analysis_runs ar ON ebw.analysis_run_id = ar.id
             WHERE ebw.token_id = ?
             ORDER BY ar.analysis_timestamp DESC, ebw.position ASC
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
 
-        token_dict['wallets'] = [dict(row) for row in cursor.fetchall()]
+        token_dict["wallets"] = [dict(row) for row in cursor.fetchall()]
 
         return token_dict
 
@@ -689,25 +764,31 @@ def get_token_analysis_history(token_id: int) -> List[Dict]:
         cursor = conn.cursor()
 
         # Get all analysis runs for this token
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT id, analysis_timestamp, wallets_found, credits_used
             FROM analysis_runs
             WHERE token_id = ?
             ORDER BY analysis_timestamp DESC
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
 
         runs = []
         for run_row in cursor.fetchall():
             run_dict = dict(run_row)
 
             # Get wallets for this specific run
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT * FROM early_buyer_wallets
                 WHERE analysis_run_id = ?
                 ORDER BY position ASC
-            ''', (run_dict['id'],))
+            """,
+                (run_dict["id"],),
+            )
 
-            run_dict['wallets'] = [dict(w) for w in cursor.fetchall()]
+            run_dict["wallets"] = [dict(w) for w in cursor.fetchall()]
             runs.append(run_dict)
 
         return runs
@@ -717,12 +798,15 @@ def get_wallet_activity(wallet_id: int, limit: int = 50) -> List[Dict]:
     """Get activity history for a specific wallet"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT * FROM wallet_activity
             WHERE wallet_id = ?
             ORDER BY timestamp DESC
             LIMIT ?
-        ''', (wallet_id, limit))
+        """,
+            (wallet_id, limit),
+        )
 
         return [dict(row) for row in cursor.fetchall()]
 
@@ -735,38 +819,49 @@ def save_wallet_activity(
     description: str,
     sol_amount: float = 0.0,
     token_amount: float = 0.0,
-    recipient_address: str = None
+    recipient_address: str = None,
 ) -> bool:
     """Save a wallet activity event"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
         # Find wallet_id
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT id FROM early_buyer_wallets
             WHERE wallet_address = ?
             LIMIT 1
-        ''', (wallet_address,))
+        """,
+            (wallet_address,),
+        )
 
         wallet = cursor.fetchone()
         if not wallet:
             return False  # Wallet not being tracked
 
-        wallet_id = wallet['id']
+        wallet_id = wallet["id"]
 
         # Insert activity (ignore duplicates)
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO wallet_activity (
                     wallet_id, transaction_signature, timestamp,
                     activity_type, description, sol_amount,
                     token_amount, recipient_address
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                wallet_id, transaction_signature, timestamp,
-                activity_type, description, sol_amount,
-                token_amount, recipient_address
-            ))
+            """,
+                (
+                    wallet_id,
+                    transaction_signature,
+                    timestamp,
+                    activity_type,
+                    description,
+                    sol_amount,
+                    token_amount,
+                    recipient_address,
+                ),
+            )
             return True
         except sqlite3.IntegrityError:
             # Duplicate transaction signature
@@ -777,7 +872,8 @@ def get_recent_activity(limit: int = 100) -> List[Dict]:
     """Get recent wallet activity across all tracked wallets"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT
                 wa.*,
                 ebw.wallet_address,
@@ -789,7 +885,9 @@ def get_recent_activity(limit: int = 100) -> List[Dict]:
             JOIN analyzed_tokens at ON ebw.token_id = at.id
             ORDER BY wa.timestamp DESC
             LIMIT ?
-        ''', (limit,))
+        """,
+            (limit,),
+        )
 
         return [dict(row) for row in cursor.fetchall()]
 
@@ -813,12 +911,12 @@ def delete_analyzed_token(token_id: int) -> bool:
         cursor = conn.cursor()
 
         # Check if token exists
-        cursor.execute('SELECT id FROM analyzed_tokens WHERE id = ?', (token_id,))
+        cursor.execute("SELECT id FROM analyzed_tokens WHERE id = ?", (token_id,))
         if not cursor.fetchone():
             return False
 
         # Delete token (CASCADE will delete wallets and activity)
-        cursor.execute('DELETE FROM analyzed_tokens WHERE id = ?', (token_id,))
+        cursor.execute("DELETE FROM analyzed_tokens WHERE id = ?", (token_id,))
 
         print(f"[Database] Deleted token ID {token_id} and all associated data")
         return True
@@ -832,10 +930,11 @@ def search_tokens(query: str) -> List[Dict]:
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
-        search_pattern = f'%{query}%'
+        search_pattern = f"%{query}%"
 
         # Search by token fields OR tokens that have matching wallets
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT DISTINCT
                 at.id, at.token_address, at.token_name, at.token_symbol, at.acronym,
                 at.analysis_timestamp, at.first_buy_timestamp, at.wallets_found,
@@ -851,7 +950,9 @@ def search_tokens(query: str) -> List[Dict]:
                    WHERE wallet_address LIKE ? COLLATE NOCASE
                )
             ORDER BY at.analysis_timestamp DESC
-        ''', (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        """,
+            (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern),
+        )
 
         tokens = []
         for row in cursor.fetchall():
@@ -876,7 +977,8 @@ def get_multi_token_wallets(min_tokens: int = 2) -> List[Dict]:
 
         # Find wallets that appear in multiple tokens
         # OPTIMIZED: Use CTE with window function instead of correlated subquery
-        cursor.execute('''
+        cursor.execute(
+            """
             WITH latest_balances AS (
                 SELECT
                     ebw.wallet_address,
@@ -904,18 +1006,22 @@ def get_multi_token_wallets(min_tokens: int = 2) -> List[Dict]:
             GROUP BY ebw.wallet_address
             HAVING COUNT(DISTINCT ebw.token_id) >= ?
             ORDER BY token_count DESC, ebw.wallet_address
-        ''', (min_tokens,))
+        """,
+            (min_tokens,),
+        )
 
         wallets = []
         for row in cursor.fetchall():
-            wallets.append({
-                'wallet_address': row[0],
-                'token_count': row[1],
-                'token_names': row[2].split(',') if row[2] else [],
-                'token_addresses': row[3].split(',') if row[3] else [],
-                'token_ids': [int(x) for x in row[4].split(',')] if row[4] else [],
-                'wallet_balance_usd': row[5]
-            })
+            wallets.append(
+                {
+                    "wallet_address": row[0],
+                    "token_count": row[1],
+                    "token_names": row[2].split(",") if row[2] else [],
+                    "token_addresses": row[3].split(",") if row[3] else [],
+                    "token_ids": [int(x) for x in row[4].split(",")] if row[4] else [],
+                    "wallet_balance_usd": row[5],
+                }
+            )
 
         return wallets
 
@@ -936,11 +1042,14 @@ def update_wallet_balance(wallet_address: str, balance_usd: float) -> bool:
 
     try:
         # Update balance in early_buyer_wallets table
-        cursor.execute('''
+        cursor.execute(
+            """
             UPDATE early_buyer_wallets
             SET wallet_balance_usd = ?
             WHERE wallet_address = ?
-        ''', (balance_usd, wallet_address))
+        """,
+            (balance_usd, wallet_address),
+        )
 
         rows_updated = cursor.getrowcount()
         conn.commit()
@@ -969,10 +1078,13 @@ def add_wallet_tag(wallet_address: str, tag: str, is_kol: bool = False) -> bool:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO wallet_tags (wallet_address, tag, is_kol)
                 VALUES (?, ?, ?)
-            ''', (wallet_address, tag, 1 if is_kol else 0))
+            """,
+                (wallet_address, tag, 1 if is_kol else 0),
+            )
             return True
         except sqlite3.IntegrityError:
             # Tag already exists for this wallet
@@ -992,10 +1104,13 @@ def remove_wallet_tag(wallet_address: str, tag: str) -> bool:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             DELETE FROM wallet_tags
             WHERE wallet_address = ? AND tag = ?
-        ''', (wallet_address, tag))
+        """,
+            (wallet_address, tag),
+        )
         return cursor.rowcount > 0
 
 
@@ -1011,12 +1126,15 @@ def get_wallet_tags(wallet_address: str) -> List[Dict]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT tag, is_kol FROM wallet_tags
             WHERE wallet_address = ?
             ORDER BY created_at DESC
-        ''', (wallet_address,))
-        return [{'tag': row[0], 'is_kol': bool(row[1])} for row in cursor.fetchall()]
+        """,
+            (wallet_address,),
+        )
+        return [{"tag": row[0], "is_kol": bool(row[1])} for row in cursor.fetchall()]
 
 
 def get_multi_wallet_tags(wallet_addresses: List[str]) -> Dict[str, List[Dict]]:
@@ -1039,21 +1157,24 @@ def get_multi_wallet_tags(wallet_addresses: List[str]) -> Dict[str, List[Dict]]:
         cursor = conn.cursor()
 
         # Create placeholders for IN clause
-        placeholders = ','.join('?' * len(wallet_addresses))
+        placeholders = ",".join("?" * len(wallet_addresses))
 
         # Single query fetches all tags for all wallets
-        cursor.execute(f'''
+        cursor.execute(
+            f"""
             SELECT wallet_address, tag, is_kol
             FROM wallet_tags
             WHERE wallet_address IN ({placeholders})
             ORDER BY wallet_address, created_at DESC
-        ''', wallet_addresses)
+        """,
+            wallet_addresses,
+        )
 
         # Group results by wallet address
         result = {addr: [] for addr in wallet_addresses}
         for row in cursor.fetchall():
             wallet_addr, tag, is_kol = row
-            result[wallet_addr].append({'tag': tag, 'is_kol': bool(is_kol)})
+            result[wallet_addr].append({"tag": tag, "is_kol": bool(is_kol)})
 
         return result
 
@@ -1067,10 +1188,12 @@ def get_all_tags() -> List[str]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT DISTINCT tag FROM wallet_tags
             ORDER BY tag
-        ''')
+        """
+        )
         return [row[0] for row in cursor.fetchall()]
 
 
@@ -1086,11 +1209,14 @@ def get_wallets_by_tag(tag: str) -> List[str]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT wallet_address FROM wallet_tags
             WHERE tag = ?
             ORDER BY created_at DESC
-        ''', (tag,))
+        """,
+            (tag,),
+        )
         return [row[0] for row in cursor.fetchall()]
 
 
@@ -1103,18 +1229,17 @@ def get_all_tagged_wallets() -> List[Dict]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT DISTINCT wallet_address FROM wallet_tags
             ORDER BY created_at DESC
-        ''')
+        """
+        )
         wallets = []
         for row in cursor.fetchall():
             wallet_address = row[0]
             tags = get_wallet_tags(wallet_address)
-            wallets.append({
-                'wallet_address': wallet_address,
-                'tags': tags
-            })
+            wallets.append({"wallet_address": wallet_address, "tags": tags})
         return wallets
 
 
@@ -1130,11 +1255,14 @@ def soft_delete_token(token_id: int) -> bool:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             UPDATE analyzed_tokens
             SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
         success = cursor.rowcount > 0
 
         if success:
@@ -1156,11 +1284,14 @@ def restore_token(token_id: int) -> bool:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             UPDATE analyzed_tokens
             SET is_deleted = 0, deleted_at = NULL
             WHERE id = ?
-        ''', (token_id,))
+        """,
+            (token_id,),
+        )
         success = cursor.rowcount > 0
 
         if success:
@@ -1187,7 +1318,7 @@ def permanent_delete_token(token_id: int) -> bool:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         # Delete token (CASCADE will handle related records)
-        cursor.execute('DELETE FROM analyzed_tokens WHERE id = ?', (token_id,))
+        cursor.execute("DELETE FROM analyzed_tokens WHERE id = ?", (token_id,))
         return cursor.rowcount > 0
 
 
@@ -1203,7 +1334,8 @@ def get_deleted_tokens(limit: int = 50) -> List[Dict]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT
                 id, token_address, token_name, token_symbol, acronym,
                 analysis_timestamp, first_buy_timestamp, wallets_found, credits_used, last_analysis_credits,
@@ -1212,7 +1344,9 @@ def get_deleted_tokens(limit: int = 50) -> List[Dict]:
             WHERE is_deleted = 1
             ORDER BY deleted_at DESC
             LIMIT ?
-        ''', (limit,))
+        """,
+            (limit,),
+        )
 
         tokens = []
         for row in cursor.fetchall():

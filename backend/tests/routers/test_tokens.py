@@ -6,6 +6,7 @@ Tests token CRUD operations, trash management, and history tracking
 
 import pytest
 from fastapi.testclient import TestClient
+
 import analyzed_tokens_db as db
 
 
@@ -23,8 +24,7 @@ class TestTokensHistory:
         assert data["total_wallets"] == 0
         assert data["tokens"] == []
 
-    def test_get_tokens_history(self, test_client: TestClient, test_db: str,
-                                sample_token_data, sample_early_bidders):
+    def test_get_tokens_history(self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders):
         """Test getting tokens history with data"""
         # Save a token to database
         token_id = db.save_analyzed_token(
@@ -35,7 +35,7 @@ class TestTokensHistory:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         response = test_client.get("/api/tokens/history")
@@ -78,8 +78,7 @@ class TestTokensHistory:
 class TestTokenDetails:
     """Test token detail endpoints"""
 
-    def test_get_token_by_id(self, test_client: TestClient, test_db: str,
-                             sample_token_data, sample_early_bidders):
+    def test_get_token_by_id(self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders):
         """Test getting token details by ID"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -89,7 +88,7 @@ class TestTokenDetails:
             early_bidders=sample_early_bidders,
             axiom_json=[{"wallet": "test"}],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         response = test_client.get(f"/api/tokens/{token_id}")
@@ -107,8 +106,9 @@ class TestTokenDetails:
         response = test_client.get("/api/tokens/99999")
         assert response.status_code == 404
 
-    def test_get_token_analysis_history(self, test_client: TestClient, test_db: str,
-                                        sample_token_data, sample_early_bidders):
+    def test_get_token_analysis_history(
+        self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders
+    ):
         """Test getting analysis history for a token"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -118,7 +118,7 @@ class TestTokenDetails:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         response = test_client.get(f"/api/tokens/{token_id}/history")
@@ -135,8 +135,7 @@ class TestTokenDetails:
 class TestTokenTrash:
     """Test token trash/soft delete functionality"""
 
-    def test_soft_delete_token(self, test_client: TestClient, test_db: str,
-                                sample_token_data, sample_early_bidders):
+    def test_soft_delete_token(self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders):
         """Test soft deleting a token"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -146,7 +145,7 @@ class TestTokenTrash:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Delete token
@@ -159,8 +158,7 @@ class TestTokenTrash:
         token_ids = [t["id"] for t in data["tokens"]]
         assert token_id not in token_ids
 
-    def test_get_deleted_tokens(self, test_client: TestClient, test_db: str,
-                                 sample_token_data, sample_early_bidders):
+    def test_get_deleted_tokens(self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders):
         """Test getting trash (deleted tokens)"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -170,7 +168,7 @@ class TestTokenTrash:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Delete token
@@ -185,8 +183,7 @@ class TestTokenTrash:
         token_ids = [t["id"] for t in data["tokens"]]
         assert token_id in token_ids
 
-    def test_restore_token(self, test_client: TestClient, test_db: str,
-                           sample_token_data, sample_early_bidders):
+    def test_restore_token(self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders):
         """Test restoring a deleted token"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -196,7 +193,7 @@ class TestTokenTrash:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Delete token
@@ -212,8 +209,9 @@ class TestTokenTrash:
         token_ids = [t["id"] for t in data["tokens"]]
         assert token_id in token_ids
 
-    def test_permanent_delete_token(self, test_client: TestClient, test_db: str,
-                                     sample_token_data, sample_early_bidders):
+    def test_permanent_delete_token(
+        self, test_client: TestClient, test_db: str, sample_token_data, sample_early_bidders
+    ):
         """Test permanently deleting a token"""
         token_id = db.save_analyzed_token(
             token_address=sample_token_data["token_address"],
@@ -223,7 +221,7 @@ class TestTokenTrash:
             early_bidders=sample_early_bidders,
             axiom_json=[],
             credits_used=50,
-            max_wallets=10
+            max_wallets=10,
         )
 
         # Soft delete first

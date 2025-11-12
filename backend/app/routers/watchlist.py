@@ -5,21 +5,11 @@ Provides REST endpoints for managing monitored wallet addresses
 """
 
 from fastapi import APIRouter, HTTPException
-from secure_logging import (
-    log_address_registered,
-    log_address_removed,
-    log_success,
-    log_warning,
-    sanitize_address
-)
 
-from app.utils.models import (
-    RegisterAddressRequest,
-    AddressNoteRequest,
-    ImportAddressesRequest
-)
-from app.utils.validators import is_valid_solana_address
 from app.services.watchlist_service import get_watchlist_service
+from app.utils.models import AddressNoteRequest, ImportAddressesRequest, RegisterAddressRequest
+from app.utils.validators import is_valid_solana_address
+from secure_logging import log_address_registered, log_address_removed, log_success, log_warning, sanitize_address
 
 router = APIRouter()
 
@@ -139,14 +129,16 @@ async def import_addresses(payload: ImportAddressesRequest):
     valid_entries = []
     for entry in payload.addresses:
         if is_valid_solana_address(entry.address.strip()):
-            valid_entries.append({
-                "address": entry.address.strip(),
-                "registered_at": entry.registered_at,
-                "threshold": entry.threshold,
-                "total_notifications": entry.total_notifications,
-                "last_notification": entry.last_notification,
-                "note": entry.note
-            })
+            valid_entries.append(
+                {
+                    "address": entry.address.strip(),
+                    "registered_at": entry.registered_at,
+                    "threshold": entry.threshold,
+                    "total_notifications": entry.total_notifications,
+                    "last_notification": entry.last_notification,
+                    "note": entry.note,
+                }
+            )
 
     return service.import_addresses(valid_entries)
 

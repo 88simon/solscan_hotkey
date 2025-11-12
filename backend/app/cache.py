@@ -4,10 +4,10 @@ Response caching with ETags and request deduplication
 Provides fast response caching to reduce database load and improve performance
 """
 
-import time
-import hashlib
 import asyncio
-from typing import Dict, Tuple, Optional, Any
+import hashlib
+import time
+from typing import Any, Dict, Optional, Tuple
 
 
 class ResponseCache:
@@ -74,6 +74,7 @@ class ResponseCache:
             MD5 hash as ETag
         """
         import json
+
         content = json.dumps(data, sort_keys=True)
         return hashlib.md5(content.encode()).hexdigest()
 

@@ -4,10 +4,11 @@ Tokens router - token management endpoints
 Provides REST endpoints for token history, details, trash management, and exports
 """
 
-from fastapi import APIRouter, HTTPException, Request, Response
-from datetime import datetime
-import aiosqlite
 import json
+from datetime import datetime
+
+import aiosqlite
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from app import settings
 from app.cache import ResponseCache
@@ -55,13 +56,9 @@ async def get_tokens_history(request: Request, response: Response):
             for row in rows:
                 token_dict = dict(row)
                 tokens.append(token_dict)
-                total_wallets += token_dict.get('wallets_found', 0)
+                total_wallets += token_dict.get("wallets_found", 0)
 
-            return {
-                "total": len(tokens),
-                "total_wallets": total_wallets,
-                "tokens": tokens
-            }
+            return {"total": len(tokens), "total_wallets": total_wallets, "tokens": tokens}
 
     result = await cache.deduplicate_request(cache_key, fetch_tokens)
     etag = cache.set(cache_key, result)
@@ -87,11 +84,7 @@ async def get_deleted_tokens():
         rows = await cursor.fetchall()
 
         tokens = [dict(row) for row in rows]
-        return {
-            "total": len(tokens),
-            "total_wallets": sum(t.get('wallets_found', 0) for t in tokens),
-            "tokens": tokens
-        }
+        return {"total": len(tokens), "total_wallets": sum(t.get("wallets_found", 0) for t in tokens), "tokens": tokens}
 
 
 @router.get("/api/tokens/{token_id}")
@@ -118,13 +111,13 @@ async def get_token_by_id(token_id: int):
         """
         cursor = await conn.execute(wallets_query, (token_id,))
         wallet_rows = await cursor.fetchall()
-        token['wallets'] = [dict(row) for row in wallet_rows]
+        token["wallets"] = [dict(row) for row in wallet_rows]
 
         # Get axiom export
         axiom_query = "SELECT axiom_json FROM analyzed_tokens WHERE id = ?"
         cursor = await conn.execute(axiom_query, (token_id,))
         axiom_row = await cursor.fetchone()
-        token['axiom_json'] = json.loads(axiom_row[0]) if axiom_row and axiom_row[0] else []
+        token["axiom_json"] = json.loads(axiom_row[0]) if axiom_row and axiom_row[0] else []
 
         return token
 
@@ -160,16 +153,12 @@ async def get_token_analysis_history(token_id: int):
                 WHERE analysis_run_id = ?
                 ORDER BY position ASC
             """
-            wallet_cursor = await conn.execute(wallets_query, (run['id'],))
+            wallet_cursor = await conn.execute(wallets_query, (run["id"],))
             wallet_rows = await wallet_cursor.fetchall()
-            run['wallets'] = [dict(w) for w in wallet_rows]
+            run["wallets"] = [dict(w) for w in wallet_rows]
             runs.append(run)
 
-        return {
-            "token_id": token_id,
-            "total_runs": len(runs),
-            "runs": runs
-        }
+        return {"token_id": token_id, "total_runs": len(runs), "runs": runs}
 
 
 @router.delete("/api/tokens/{token_id}")

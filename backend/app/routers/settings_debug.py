@@ -5,11 +5,11 @@ Provides REST endpoints for managing API settings and debug configuration
 """
 
 from fastapi import APIRouter, HTTPException
-from debug_config import DEBUG_MODE, get_debug_js_flag
 
 from app.settings import CURRENT_API_SETTINGS, save_api_settings
 from app.utils.models import UpdateSettingsRequest
 from app.websocket import get_connection_manager
+from debug_config import DEBUG_MODE, get_debug_js_flag
 
 router = APIRouter()
 
@@ -17,6 +17,7 @@ router = APIRouter()
 # ============================================================================
 # Root & Health Check
 # ============================================================================
+
 
 @router.get("/")
 async def root():
@@ -31,8 +32,8 @@ async def root():
             "tokens": "/api/tokens/history",
             "analysis": "/analysis",
             "watchlist": "/addresses",
-            "settings": "/api/settings"
-        }
+            "settings": "/api/settings",
+        },
     }
 
 
@@ -46,13 +47,14 @@ async def health_check():
         "version": "2.0.0",
         "architecture": "modular",
         "endpoints": 46,
-        "websocket_connections": manager.get_connection_count() if manager else 0
+        "websocket_connections": manager.get_connection_count() if manager else 0,
     }
 
 
 # ============================================================================
 # Debug Configuration
 # ============================================================================
+
 
 @router.get("/api/debug-mode")
 async def get_debug_mode():
@@ -69,6 +71,7 @@ async def get_debug_config():
 # ============================================================================
 # API Settings
 # ============================================================================
+
 
 @router.get("/api/settings")
 async def get_api_settings():

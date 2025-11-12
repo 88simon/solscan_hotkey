@@ -7,17 +7,17 @@ Handles loading, saving, and manipulating the watchlist (monitored addresses)
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from app import settings
 from app.state import (
-    monitored_addresses,
-    get_monitored_address,
-    set_monitored_address,
-    remove_monitored_address,
-    get_all_monitored_addresses,
     clear_monitored_addresses,
-    get_monitored_address_count
+    get_all_monitored_addresses,
+    get_monitored_address,
+    get_monitored_address_count,
+    monitored_addresses,
+    remove_monitored_address,
+    set_monitored_address,
 )
 
 
@@ -72,7 +72,7 @@ class WatchlistService:
                 "status": "already_registered",
                 "message": "Address already being monitored",
                 "address": address,
-                "registered_at": existing.get("registered_at")
+                "registered_at": existing.get("registered_at"),
             }
 
         address_data = {
@@ -81,7 +81,7 @@ class WatchlistService:
             "threshold": settings.DEFAULT_THRESHOLD,
             "total_notifications": 0,
             "last_notification": None,
-            "note": note
+            "note": note,
         }
 
         set_monitored_address(address, address_data)
@@ -95,7 +95,7 @@ class WatchlistService:
             "message": "Address registered for monitoring",
             "address": address,
             "threshold": settings.DEFAULT_THRESHOLD,
-            "total_monitored": get_monitored_address_count()
+            "total_monitored": get_monitored_address_count(),
         }
 
     def get_address(self, address: str) -> Optional[Dict[str, Any]]:
@@ -118,10 +118,7 @@ class WatchlistService:
             Dictionary with total and addresses list
         """
         addresses = get_all_monitored_addresses()
-        return {
-            "total": len(addresses),
-            "addresses": list(addresses.values())
-        }
+        return {"total": len(addresses), "addresses": list(addresses.values())}
 
     def unregister_address(self, address: str) -> Dict[str, Any]:
         """
@@ -139,11 +136,7 @@ class WatchlistService:
         remove_monitored_address(address)
         self.save_addresses()
 
-        return {
-            "status": "success",
-            "message": "Address removed from monitoring",
-            "address": address
-        }
+        return {"status": "success", "message": "Address removed from monitoring", "address": address}
 
     def update_note(self, address: str, note: Optional[str]) -> Dict[str, Any]:
         """
@@ -164,12 +157,7 @@ class WatchlistService:
         set_monitored_address(address, address_data)
         self.save_addresses()
 
-        return {
-            "status": "success",
-            "message": "Note updated successfully",
-            "address": address,
-            "note": note
-        }
+        return {"status": "success", "message": "Note updated successfully", "address": address, "note": note}
 
     def import_addresses(self, entries: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -200,7 +188,7 @@ class WatchlistService:
                 "threshold": entry.get("threshold") or settings.DEFAULT_THRESHOLD,
                 "total_notifications": entry.get("total_notifications") or 0,
                 "last_notification": entry.get("last_notification"),
-                "note": entry.get("note")
+                "note": entry.get("note"),
             }
 
             set_monitored_address(address, address_data)
@@ -213,7 +201,7 @@ class WatchlistService:
             "message": f"Imported {added} addresses ({skipped} duplicates skipped)",
             "added": added,
             "skipped": skipped,
-            "total": get_monitored_address_count()
+            "total": get_monitored_address_count(),
         }
 
     def clear_all(self) -> Dict[str, Any]:
@@ -227,11 +215,7 @@ class WatchlistService:
         clear_monitored_addresses()
         self.save_addresses()
 
-        return {
-            "status": "success",
-            "message": f"Cleared {count} addresses",
-            "total_monitored": 0
-        }
+        return {"status": "success", "message": f"Cleared {count} addresses", "total_monitored": 0}
 
 
 # Singleton instance

@@ -4,14 +4,15 @@ Wallets router - multi-token wallets and balance refresh endpoints
 Provides REST endpoints for wallet operations
 """
 
-from fastapi import APIRouter, HTTPException
-import aiosqlite
 import asyncio
+
+import aiosqlite
 import requests
+from fastapi import APIRouter, HTTPException
 
 from app import settings
-from app.utils.models import RefreshBalancesRequest
 from app.cache import ResponseCache
+from app.utils.models import RefreshBalancesRequest
 
 router = APIRouter()
 cache = ResponseCache()
@@ -48,9 +49,13 @@ async def get_multi_early_buyer_wallets(min_tokens: int = 2):
         wallets = []
         for row in rows:
             wallet_dict = dict(row)
-            wallet_dict['token_names'] = wallet_dict['token_names'].split(',') if wallet_dict['token_names'] else []
-            wallet_dict['token_addresses'] = wallet_dict['token_addresses'].split(',') if wallet_dict['token_addresses'] else []
-            wallet_dict['token_ids'] = [int(id) for id in wallet_dict['token_ids'].split(',') if wallet_dict['token_ids']]
+            wallet_dict["token_names"] = wallet_dict["token_names"].split(",") if wallet_dict["token_names"] else []
+            wallet_dict["token_addresses"] = (
+                wallet_dict["token_addresses"].split(",") if wallet_dict["token_addresses"] else []
+            )
+            wallet_dict["token_ids"] = [
+                int(id) for id in wallet_dict["token_ids"].split(",") if wallet_dict["token_ids"]
+            ]
             wallets.append(wallet_dict)
 
         result = {"total": len(wallets), "wallets": wallets}
@@ -73,31 +78,18 @@ async def refresh_wallet_balances(request: RefreshBalancesRequest):
             response = await loop.run_in_executor(
                 None,
                 lambda: requests.get(
-                    f"https://api.helius.xyz/v0/addresses/{wallet_address}/balances?api-key={api_key}",
-                    timeout=10
-                )
+                    f"https://api.helius.xyz/v0/addresses/{wallet_address}/balances?api-key={api_key}", timeout=10
+                ),
             )
 
             if response.status_code == 200:
                 data = response.json()
-                balance_usd = data.get('nativeBalance', 0) * 0.001
-                return {
-                    "wallet_address": wallet_address,
-                    "balance_usd": balance_usd,
-                    "success": True
-                }
+                balance_usd = data.get("nativeBalance", 0) * 0.001
+                return {"wallet_address": wallet_address, "balance_usd": balance_usd, "success": True}
             else:
-                return {
-                    "wallet_address": wallet_address,
-                    "balance_usd": None,
-                    "success": False
-                }
+                return {"wallet_address": wallet_address, "balance_usd": None, "success": False}
         except Exception:
-            return {
-                "wallet_address": wallet_address,
-                "balance_usd": None,
-                "success": False
-            }
+            return {"wallet_address": wallet_address, "balance_usd": None, "success": False}
 
     # Fetch all balances concurrently
     results = await asyncio.gather(*[fetch_balance(addr) for addr in wallet_addresses])
@@ -105,21 +97,21 @@ async def refresh_wallet_balances(request: RefreshBalancesRequest):
     # Update database
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
         for result in results:
-            if result['success'] and result['balance_usd'] is not None:
+            if result["success"] and result["balance_usd"] is not None:
                 await conn.execute(
                     "UPDATE early_buyer_wallets SET wallet_balance_usd = ? WHERE wallet_address = ?",
-                    (result['balance_usd'], result['wallet_address'])
+                    (result["balance_usd"], result["wallet_address"]),
                 )
         await conn.commit()
 
     cache.invalidate("multi_early_buyer_wallets")
 
-    successful = sum(1 for r in results if r['success'])
+    successful = sum(1 for r in results if r["success"])
 
     return {
         "message": f"Refreshed {successful} of {len(wallet_addresses)} wallets",
         "results": results,
         "total_wallets": len(wallet_addresses),
         "successful": successful,
-        "api_credits_used": len(wallet_addresses)
+        "api_credits_used": len(wallet_addresses),
     }

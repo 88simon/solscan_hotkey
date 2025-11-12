@@ -4,23 +4,25 @@ Pytest fixtures and configuration for Gun Del Sol tests
 Provides shared fixtures for all test modules
 """
 
-import pytest
-import tempfile
-import os
 import json
+import os
 import sqlite3
-from typing import Generator, Dict, Any
+import tempfile
+from typing import Any, Dict, Generator
+
+import pytest
 from fastapi.testclient import TestClient
+
+from app import settings, state
 
 # Import the app
 from app.main import create_app
-from app import settings, state
 
 
 @pytest.fixture(scope="function")
 def test_db_path() -> Generator[str, None, None]:
     """Create a temporary test database for each test"""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.db', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".db", delete=False) as f:
         db_path = f.name
 
     yield db_path
@@ -69,11 +71,11 @@ def test_client(test_db: str, monkeypatch) -> Generator[TestClient, None, None]:
     monkeypatch.setattr(settings, "DATABASE_FILE", test_db)
 
     # Create temporary files for test data
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         test_data_file = f.name
         json.dump({}, f)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         test_settings_file = f.name
         json.dump(settings.DEFAULT_API_SETTINGS, f)
 
@@ -86,7 +88,8 @@ def test_client(test_db: str, monkeypatch) -> Generator[TestClient, None, None]:
     state.analysis_jobs.clear()
 
     # Clear all router caches before each test
-    from app.routers import tokens, tags, wallets
+    from app.routers import tags, tokens, wallets
+
     tokens.cache.cache.clear()
     tokens.cache.pending_requests.clear()
     tags.cache.cache.clear()
@@ -117,7 +120,7 @@ def sample_token_data() -> Dict[str, Any]:
         "acronym": "TT",
         "analysis_timestamp": "2024-01-15T10:00:00",
         "first_buy_timestamp": "2024-01-15T09:00:00",
-        "wallets_found": 5
+        "wallets_found": 5,
     }
 
 
@@ -137,7 +140,7 @@ def sample_early_bidders() -> list:
             "total_usd": 150.0,
             "transaction_count": 3,
             "average_buy_usd": 50.0,
-            "wallet_balance_usd": 1000.0
+            "wallet_balance_usd": 1000.0,
         },
         {
             "wallet_address": "7xLk17EQQ5KLDLDe44wCmupJKJjTGd8hs3eSVVhCx6ku",
@@ -145,8 +148,8 @@ def sample_early_bidders() -> list:
             "total_usd": 200.0,
             "transaction_count": 2,
             "average_buy_usd": 100.0,
-            "wallet_balance_usd": 2000.0
-        }
+            "wallet_balance_usd": 2000.0,
+        },
     ]
 
 
@@ -159,7 +162,7 @@ def sample_analysis_settings() -> Dict[str, Any]:
         "walletCount": 10,
         "apiRateDelay": 100,
         "maxCreditsPerAnalysis": 1000,
-        "maxRetries": 3
+        "maxRetries": 3,
     }
 
 
@@ -168,14 +171,7 @@ def mock_helius_response() -> Dict[str, Any]:
     """Mock Helius API response for testing"""
     return {
         "token_address": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
-        "token_info": {
-            "onChainMetadata": {
-                "metadata": {
-                    "name": "Test Token",
-                    "symbol": "TEST"
-                }
-            }
-        },
+        "token_info": {"onChainMetadata": {"metadata": {"name": "Test Token", "symbol": "TEST"}}},
         "first_transaction_time": "2024-01-15T09:00:00",
         "early_bidders": [
             {
@@ -183,10 +179,10 @@ def mock_helius_response() -> Dict[str, Any]:
                 "first_buy_time": "2024-01-15T09:01:00",
                 "total_usd": 150.0,
                 "transaction_count": 3,
-                "average_buy_usd": 50.0
+                "average_buy_usd": 50.0,
             }
         ],
         "total_unique_buyers": 1,
         "total_transactions_analyzed": 100,
-        "api_credits_used": 50
+        "api_credits_used": 50,
     }
