@@ -192,13 +192,36 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Check if there are changes
           git add src/lib/generated/api-types.ts
           if git diff --staged --quiet; then
             echo "No changes to commit in frontend"
+            echo "has_changes=false" >> $GITHUB_ENV
           else
+            # Create a new branch for the update
+            BRANCH_NAME="chore/update-api-types-$(date +%Y%m%d-%H%M%S)"
+            git checkout -b "$BRANCH_NAME"
+
+            # Commit and push to new branch
             git commit -m "chore: update API types from backend OpenAPI schema" -m "Auto-generated from backend commit ${{ github.sha }}"
-            git push
+            git push origin "$BRANCH_NAME"
+
+            echo "has_changes=true" >> $GITHUB_ENV
+            echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
           fi
+
+      - name: Create Pull Request
+        if: env.has_changes == 'true'
+        working-directory: frontend-repo
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_SYNC_TOKEN || github.token }}
+        run: |
+          gh pr create \
+            --title "chore: update API types from backend" \
+            --body "Auto-generated API types update from backend commit ${{ github.sha }}" \
+            --base main \
+            --head "${{ env.branch_name }}"
 
       - name: Upload TypeScript types artifact
         uses: actions/upload-artifact@v4
