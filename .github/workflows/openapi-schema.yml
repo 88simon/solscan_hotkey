@@ -46,12 +46,20 @@ jobs:
           python <<'PYEOF'
           import sys
           import json
+          import io
           from pathlib import Path
 
           # Add parent directory to path to import modules
           sys.path.insert(0, str(Path.cwd()))
 
+          # Suppress FastAPI startup logs by redirecting stdout
+          old_stdout = sys.stdout
+          sys.stdout = io.StringIO()
+
           from app.main import app
+
+          # Restore stdout
+          sys.stdout = old_stdout
 
           # Export OpenAPI schema
           schema = app.openapi()
@@ -125,16 +133,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: export-schema
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout backend repo
         uses: actions/checkout@v4
+        with:
+          path: backend-repo
+
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: 88simon/gun-del-sol-web
+          token: ${{ secrets.FRONTEND_SYNC_TOKEN || github.token }}
+          path: frontend-repo
 
       - name: Download OpenAPI schema
         uses: actions/download-artifact@v4
         with:
           name: openapi-schema
-          path: backend
+          path: backend-repo/backend
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -146,12 +165,44 @@ jobs:
 
       - name: Generate TypeScript types
         run: |
-          npx openapi-typescript backend/openapi.json -o backend/api-types.ts
+          npx openapi-typescript backend-repo/backend/openapi.json -o backend-repo/backend/api-types.ts
           echo "TypeScript types generated successfully!"
 
-      - name: Upload TypeScript types
+      - name: Copy types to frontend
+        run: |
+          mkdir -p frontend-repo/src/lib/generated
+          cp backend-repo/backend/api-types.ts frontend-repo/src/lib/generated/api-types.ts
+          echo "Types copied to frontend repo"
+
+      - name: Commit types to backend repo
+        working-directory: backend-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/api-types.ts
+          if git diff --staged --quiet; then
+            echo "No changes to commit in backend"
+          else
+            git commit -m "chore: update generated TypeScript types from OpenAPI schema"
+            git push
+          fi
+
+      - name: Commit types to frontend repo
+        working-directory: frontend-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/lib/generated/api-types.ts
+          if git diff --staged --quiet; then
+            echo "No changes to commit in frontend"
+          else
+            git commit -m "chore: update API types from backend OpenAPI schema" -m "Auto-generated from backend commit ${{ github.sha }}"
+            git push
+          fi
+
+      - name: Upload TypeScript types artifact
         uses: actions/upload-artifact@v4
         with:
           name: api-types
-          path: backend/api-types.ts
+          path: backend-repo/backend/api-types.ts
           retention-days: 90
