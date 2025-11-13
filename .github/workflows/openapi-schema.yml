@@ -3,20 +3,18 @@ name: OpenAPI Schema Export
 on:
   push:
     branches: [main]
-    paths:
-      - "backend/app/**"
-      - ".github/workflows/openapi-schema.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "backend/app/**"
-      - ".github/workflows/openapi-schema.yml"
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   export-schema:
     name: Export OpenAPI Schema
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout code

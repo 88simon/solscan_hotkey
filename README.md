@@ -1,9 +1,9 @@
 # Gun Del Sol
 
-[![CI](https://github.com/88simon/solscan_hotkey/workflows/CI/badge.svg)](https://github.com/88simon/solscan_hotkey/actions)
-[![Backend CI](https://github.com/88simon/solscan_hotkey/workflows/Backend%20CI/badge.svg)](https://github.com/88simon/solscan_hotkey/actions)
-[![OpenAPI Schema](https://github.com/88simon/solscan_hotkey/workflows/OpenAPI%20Schema%20Export/badge.svg)](https://github.com/88simon/solscan_hotkey/actions)
-[![codecov](https://codecov.io/gh/88simon/solscan_hotkey/branch/main/graph/badge.svg)](https://codecov.io/gh/88simon/solscan_hotkey)
+[![CI](https://github.com/88simon/gun_del_sol/workflows/CI/badge.svg)](https://github.com/88simon/gun_del_sol/actions)
+[![Backend CI](https://github.com/88simon/gun_del_sol/workflows/Backend%20CI/badge.svg)](https://github.com/88simon/gun_del_sol/actions)
+[![OpenAPI Schema](https://github.com/88simon/gun_del_sol/workflows/OpenAPI%20Schema%20Export/badge.svg)](https://github.com/88simon/gun_del_sol/actions)
+[![codecov](https://codecov.io/gh/88simon/gun_del_sol/branch/main/graph/badge.svg)](https://codecov.io/gh/88simon/gun_del_sol)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
