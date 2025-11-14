@@ -10,14 +10,22 @@ from fastapi import APIRouter, HTTPException
 import analyzed_tokens_db as db
 from app import settings
 from app.cache import ResponseCache
-from app.utils.models import AddTagRequest, BatchTagsRequest, RemoveTagRequest
+from app.utils.models import (
+    AddTagRequest,
+    BatchTagsRequest,
+    CodexResponse,
+    MessageResponse,
+    RemoveTagRequest,
+    TagsResponse,
+    WalletTagsResponse,
+)
 from secure_logging import log_error
 
 router = APIRouter()
 cache = ResponseCache()
 
 
-@router.get("/wallets/{wallet_address}/tags")
+@router.get("/wallets/{wallet_address}/tags", response_model=WalletTagsResponse)
 async def get_wallet_tags(wallet_address: str):
     """Get tags for a wallet"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -29,7 +37,7 @@ async def get_wallet_tags(wallet_address: str):
         return {"tags": tags}
 
 
-@router.post("/wallets/{wallet_address}/tags")
+@router.post("/wallets/{wallet_address}/tags", response_model=MessageResponse)
 async def add_wallet_tag(wallet_address: str, request: AddTagRequest):
     """Add a tag to a wallet"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -46,7 +54,7 @@ async def add_wallet_tag(wallet_address: str, request: AddTagRequest):
     return {"message": "Tag added successfully"}
 
 
-@router.delete("/wallets/{wallet_address}/tags")
+@router.delete("/wallets/{wallet_address}/tags", response_model=MessageResponse)
 async def remove_wallet_tag(wallet_address: str, request: RemoveTagRequest):
     """Remove a tag from a wallet"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -59,7 +67,7 @@ async def remove_wallet_tag(wallet_address: str, request: RemoveTagRequest):
     return {"message": "Tag removed successfully"}
 
 
-@router.get("/tags")
+@router.get("/tags", response_model=TagsResponse)
 async def get_all_tags():
     """Get all unique tags"""
     cache_key = "all_tags"
@@ -77,7 +85,7 @@ async def get_all_tags():
         return result
 
 
-@router.get("/codex")
+@router.get("/codex", response_model=CodexResponse)
 async def get_codex():
     """Get all wallets with tags (Codex)"""
     cache_key = "codex"

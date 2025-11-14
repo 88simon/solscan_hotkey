@@ -12,13 +12,17 @@ from fastapi import APIRouter, HTTPException
 
 from app import settings
 from app.cache import ResponseCache
-from app.utils.models import RefreshBalancesRequest
+from app.utils.models import (
+    MultiTokenWalletsResponse,
+    RefreshBalancesRequest,
+    RefreshBalancesResponse,
+)
 
 router = APIRouter()
 cache = ResponseCache()
 
 
-@router.get("/multi-token-wallets")
+@router.get("/multi-token-wallets", response_model=MultiTokenWalletsResponse)
 async def get_multi_early_buyer_wallets(min_tokens: int = 2):
     """Get wallets that appear in multiple tokens"""
     cache_key = f"multi_early_buyer_wallets_{min_tokens}"
@@ -63,7 +67,7 @@ async def get_multi_early_buyer_wallets(min_tokens: int = 2):
         return result
 
 
-@router.post("/wallets/refresh-balances")
+@router.post("/wallets/refresh-balances", response_model=RefreshBalancesResponse)
 async def refresh_wallet_balances(request: RefreshBalancesRequest):
     """Refresh wallet balances for multiple wallets (ASYNC)"""
     wallet_addresses = request.wallet_addresses

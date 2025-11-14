@@ -6,18 +6,20 @@ Provides REST endpoints for token history, details, trash management, and export
 
 import json
 from datetime import datetime
+from typing import Any, Dict, List
 
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from app import settings
 from app.cache import ResponseCache
+from app.utils.models import AnalysisHistory, MessageResponse, TokenDetail, TokensResponse
 
 router = APIRouter()
 cache = ResponseCache()
 
 
-@router.get("/api/tokens/history")
+@router.get("/api/tokens/history", response_model=TokensResponse)
 async def get_tokens_history(request: Request, response: Response):
     """Get all non-deleted tokens with wallet counts (with caching)"""
     cache_key = "tokens_history"
@@ -66,7 +68,7 @@ async def get_tokens_history(request: Request, response: Response):
     return result
 
 
-@router.get("/api/tokens/trash")
+@router.get("/api/tokens/trash", response_model=TokensResponse)
 async def get_deleted_tokens():
     """Get all soft-deleted tokens"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -87,7 +89,7 @@ async def get_deleted_tokens():
         return {"total": len(tokens), "total_wallets": sum(t.get("wallets_found", 0) for t in tokens), "tokens": tokens}
 
 
-@router.get("/api/tokens/{token_id}")
+@router.get("/api/tokens/{token_id}", response_model=TokenDetail)
 async def get_token_by_id(token_id: int):
     """Get token details with wallets and axiom export"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -122,7 +124,7 @@ async def get_token_by_id(token_id: int):
         return token
 
 
-@router.get("/api/tokens/{token_id}/history")
+@router.get("/api/tokens/{token_id}/history", response_model=AnalysisHistory)
 async def get_token_analysis_history(token_id: int):
     """Get analysis history for a specific token"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -161,7 +163,7 @@ async def get_token_analysis_history(token_id: int):
         return {"token_id": token_id, "total_runs": len(runs), "runs": runs}
 
 
-@router.delete("/api/tokens/{token_id}")
+@router.delete("/api/tokens/{token_id}", response_model=MessageResponse)
 async def soft_delete_token(token_id: int):
     """Soft delete a token (move to trash)"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -173,7 +175,7 @@ async def soft_delete_token(token_id: int):
     return {"message": "Token moved to trash"}
 
 
-@router.post("/api/tokens/{token_id}/restore")
+@router.post("/api/tokens/{token_id}/restore", response_model=MessageResponse)
 async def restore_token(token_id: int):
     """Restore a soft-deleted token"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:
@@ -185,7 +187,7 @@ async def restore_token(token_id: int):
     return {"message": "Token restored"}
 
 
-@router.delete("/api/tokens/{token_id}/permanent")
+@router.delete("/api/tokens/{token_id}/permanent", response_model=MessageResponse)
 async def permanent_delete_token(token_id: int):
     """Permanently delete a token and all associated data"""
     async with aiosqlite.connect(settings.DATABASE_FILE) as conn:

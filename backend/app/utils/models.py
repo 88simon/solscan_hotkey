@@ -28,15 +28,49 @@ class Token(BaseModel):
     deleted_at: Optional[str] = None
 
 
+class TokenDetail(BaseModel):
+    """Token with wallet details and axiom data"""
+
+    id: int
+    token_address: str
+    token_name: Optional[str]
+    token_symbol: Optional[str]
+    acronym: str
+    analysis_timestamp: str
+    first_buy_timestamp: Optional[str]
+    wallets_found: int
+    credits_used: Optional[int] = None
+    last_analysis_credits: Optional[int] = None
+    deleted_at: Optional[str] = None
+    wallets: List[Dict[str, Any]]  # Will be Wallet objects from DB
+    axiom_json: List[Any]
+
+
 class TokensResponse(BaseModel):
     total: int
     total_wallets: int
-    tokens: List[Dict[str, Any]]
+    tokens: List[Token]
+
+
+class MessageResponse(BaseModel):
+    """Simple message response"""
+
+    message: str
 
 
 # ============================================================================
 # Wallet Models
 # ============================================================================
+
+
+class Wallet(BaseModel):
+    id: int
+    wallet_address: str
+    first_buy_timestamp: str
+    total_usd: Optional[float]
+    transaction_count: Optional[int]
+    average_buy_usd: Optional[float]
+    wallet_balance_usd: Optional[float]
 
 
 class MultiTokenWallet(BaseModel):
@@ -50,7 +84,7 @@ class MultiTokenWallet(BaseModel):
 
 class MultiTokenWalletsResponse(BaseModel):
     total: int
-    wallets: List[Dict[str, Any]]
+    wallets: List[MultiTokenWallet]
 
 
 class WalletTag(BaseModel):
@@ -62,9 +96,15 @@ class RefreshBalancesRequest(BaseModel):
     wallet_addresses: List[str] = Field(..., min_items=1)
 
 
+class RefreshBalancesResult(BaseModel):
+    wallet_address: str
+    balance_usd: Optional[float]
+    success: bool
+
+
 class RefreshBalancesResponse(BaseModel):
     message: str
-    results: List[Dict[str, Any]]
+    results: List[RefreshBalancesResult]
     total_wallets: int
     successful: int
     api_credits_used: int
@@ -72,6 +112,47 @@ class RefreshBalancesResponse(BaseModel):
 
 # ============================================================================
 # Tag Models
+# ============================================================================
+
+
+class WalletTagsResponse(BaseModel):
+    tags: List[WalletTag]
+
+
+class TagsResponse(BaseModel):
+    tags: List[str]
+
+
+class CodexWallet(BaseModel):
+    wallet_address: str
+    tags: List[WalletTag]
+
+
+class CodexResponse(BaseModel):
+    wallets: List[CodexWallet]
+
+
+# ============================================================================
+# Analysis History Models
+# ============================================================================
+
+
+class AnalysisRun(BaseModel):
+    id: int
+    analysis_timestamp: str
+    wallets_found: int
+    credits_used: int
+    wallets: List[Dict[str, Any]]  # List of wallet dicts from DB
+
+
+class AnalysisHistory(BaseModel):
+    token_id: int
+    total_runs: int
+    runs: List[AnalysisRun]
+
+
+# ============================================================================
+# Original Tag Models (keeping for compatibility)
 # ============================================================================
 
 
