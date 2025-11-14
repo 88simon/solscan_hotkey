@@ -19,7 +19,14 @@ from fastapi.responses import FileResponse, StreamingResponse
 import analyzed_tokens_db as db
 from app.settings import CURRENT_API_SETTINGS, HELIUS_API_KEY
 from app.state import ANALYSIS_EXECUTOR, get_all_analysis_jobs, get_analysis_job, set_analysis_job, update_analysis_job
-from app.utils.models import AnalysisSettings, AnalyzeTokenRequest
+from app.utils.models import (
+    AnalysisJob,
+    AnalysisJobSummary,
+    AnalysisListResponse,
+    AnalysisSettings,
+    AnalyzeTokenRequest,
+    QueueTokenResponse,
+)
 from app.utils.validators import is_valid_solana_address
 from app.websocket import get_connection_manager
 from helius_api import TokenAnalyzer, generate_axiom_export, generate_token_acronym
@@ -159,7 +166,7 @@ def run_token_analysis_sync(
         update_analysis_job(job_id, {"status": "failed", "error": str(e)})
 
 
-@router.post("/analyze/token", status_code=202)
+@router.post("/analyze/token", status_code=202, response_model=QueueTokenResponse)
 async def analyze_token(request: AnalyzeTokenRequest):
     """Analyze a token to find early bidders (queues job)"""
     if not is_valid_solana_address(request.address):
@@ -213,7 +220,7 @@ async def analyze_token(request: AnalyzeTokenRequest):
     }
 
 
-@router.get("/analysis/{job_id}")
+@router.get("/analysis/{job_id}", response_model=AnalysisJob)
 async def get_analysis(job_id: str):
     """Get analysis job status and results"""
     job = get_analysis_job(job_id)
@@ -237,7 +244,7 @@ async def get_analysis(job_id: str):
     return job_copy
 
 
-@router.get("/analysis")
+@router.get("/analysis", response_model=AnalysisListResponse)
 async def list_analyses(search: str = None, limit: int = 100):
     """List analysis jobs and completed tokens"""
     try:
