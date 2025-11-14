@@ -212,6 +212,38 @@ class AnalysisJob(BaseModel):
     result_file: Optional[str] = None
 
 
+class QueueTokenResponse(BaseModel):
+    """Response when queuing a token for analysis"""
+
+    status: str
+    job_id: str
+    token_address: str
+    api_settings: Dict[str, Any]
+    results_url: str
+
+
+class AnalysisJobSummary(BaseModel):
+    """Summary info for analysis job in list view"""
+
+    job_id: str
+    status: str
+    token_address: str
+    token_name: Optional[str] = None
+    token_symbol: Optional[str] = None
+    acronym: Optional[str] = None
+    wallets_found: Optional[int] = None
+    timestamp: Optional[str] = None
+    credits_used: Optional[int] = None
+    results_url: str
+
+
+class AnalysisListResponse(BaseModel):
+    """Response for listing analysis jobs"""
+
+    total: int
+    jobs: List[AnalysisJobSummary]
+
+
 # ============================================================================
 # Watchlist/Address Monitoring Models
 # ============================================================================
