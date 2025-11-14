@@ -189,40 +189,6 @@ jobs:
           cp backend-repo/backend/api-types.ts frontend-repo/src/lib/generated/api-types.ts
           echo "Types copied to frontend repo"
 
-      - name: Commit types to backend repo
-        working-directory: backend-repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backend/api-types.ts
-          if git diff --staged --quiet; then
-            echo "No changes to commit in backend"
-            echo "backend_has_changes=false" >> $GITHUB_ENV
-          else
-            # Create a new branch for the update
-            BRANCH_NAME="chore/update-api-types-$(date +%Y%m%d-%H%M%S)"
-            git checkout -b "$BRANCH_NAME"
-
-            # Commit and push to new branch
-            git commit -m "chore: update generated TypeScript types from OpenAPI schema"
-            git push origin "$BRANCH_NAME"
-
-            echo "backend_has_changes=true" >> $GITHUB_ENV
-            echo "backend_branch_name=$BRANCH_NAME" >> $GITHUB_ENV
-          fi
-
-      - name: Create Backend Pull Request
-        if: env.backend_has_changes == 'true'
-        working-directory: backend-repo
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr create \
-            --title "chore: update generated TypeScript types" \
-            --body "Auto-generated TypeScript types from OpenAPI schema (commit ${{ github.sha }})" \
-            --base main \
-            --head "${{ env.backend_branch_name }}"
-
       - name: Commit types to frontend repo
         working-directory: frontend-repo
         run: |
