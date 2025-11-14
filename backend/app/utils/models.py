@@ -28,6 +28,16 @@ class Token(BaseModel):
     deleted_at: Optional[str] = None
 
 
+class Wallet(BaseModel):
+    id: int
+    wallet_address: str
+    first_buy_timestamp: str
+    total_usd: Optional[float]
+    transaction_count: Optional[int]
+    average_buy_usd: Optional[float]
+    wallet_balance_usd: Optional[float]
+
+
 class TokenDetail(BaseModel):
     """Token with wallet details and axiom data"""
 
@@ -42,7 +52,7 @@ class TokenDetail(BaseModel):
     credits_used: Optional[int] = None
     last_analysis_credits: Optional[int] = None
     deleted_at: Optional[str] = None
-    wallets: List[Dict[str, Any]]  # Will be Wallet objects from DB
+    wallets: List[Wallet]
     axiom_json: List[Any]
 
 
@@ -61,16 +71,6 @@ class MessageResponse(BaseModel):
 # ============================================================================
 # Wallet Models
 # ============================================================================
-
-
-class Wallet(BaseModel):
-    id: int
-    wallet_address: str
-    first_buy_timestamp: str
-    total_usd: Optional[float]
-    transaction_count: Optional[int]
-    average_buy_usd: Optional[float]
-    wallet_balance_usd: Optional[float]
 
 
 class MultiTokenWallet(BaseModel):
@@ -142,7 +142,7 @@ class AnalysisRun(BaseModel):
     analysis_timestamp: str
     wallets_found: int
     credits_used: int
-    wallets: List[Dict[str, Any]]  # List of wallet dicts from DB
+    wallets: List[Wallet]
 
 
 class AnalysisHistory(BaseModel):
