@@ -174,7 +174,6 @@ jobs:
           echo "/**" > "$TEMP_FILE"
           echo " * Auto-generated TypeScript types from Backend OpenAPI schema" >> "$TEMP_FILE"
           echo " * Backend Commit: $BACKEND_SHA" >> "$TEMP_FILE"
-          echo " * Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$TEMP_FILE"
           echo " * DO NOT EDIT - This file is auto-generated" >> "$TEMP_FILE"
           echo " */" >> "$TEMP_FILE"
           echo "" >> "$TEMP_FILE"
